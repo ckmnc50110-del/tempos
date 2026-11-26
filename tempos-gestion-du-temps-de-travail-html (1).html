@@ -4,710 +4,402 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Tempos — Gestion du temps de travail</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root { font-family: Inter, system-ui, sans-serif; color:#1e293b; background:#f1f5f9; }
   * { box-sizing:border-box; }
   body { margin:0; padding:20px; }
-  h1 { font-size:1.4rem; margin:0; }
-  h2 { font-size:1.1rem; margin:0 0 8px; }
+  h1 { font-size:1.3rem; margin:0; }
   .muted { color:#64748b; font-size:.85rem; }
-  header { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  header { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:16px; }
   .badge { border:1px solid #6ee7b7; background:#ecfdf5; color:#047857; padding:4px 10px; border-radius:999px; font-size:.75rem; }
-  .badge.blue { border-color:#93c5fd; background:#eff6ff; color:#1d4ed8; }
-  .bell { position:relative; border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:7px 12px; cursor:pointer; font-size:.9rem; }
-  .bell .cnt { position:absolute; top:-7px; right:-7px; background:#dc2626; color:#fff; border-radius:999px; font-size:.65rem; padding:1px 5px; }
   nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
-  nav button { padding:8px 14px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; font-size:.85rem; font-weight:500; }
+  nav button { padding:8px 14px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; font-size:.85rem; }
   nav button.active { background:#0f172a; color:#fff; border-color:#0f172a; }
   .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px; overflow-x:auto; }
-  @media (max-width:640px){
-    body { padding:10px; }
-    h1 { font-size:1.1rem; }
-    header { gap:8px; }
-    nav button { padding:7px 10px; font-size:.78rem; }
-    .barrow .lbl { width:100px; }
-    .grid { grid-template-columns:1fr; }
-  }
   .card h3 { margin:0 0 10px; font-size:.95rem; }
   table { width:100%; border-collapse:collapse; font-size:.85rem; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #e2e8f0; }
-  th { color:#475569; font-weight:600; }
-  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
   label { display:block; font-size:.75rem; color:#475569; margin-bottom:3px; }
-  input, select, textarea { padding:7px 9px; border:1px solid #cbd5e1; border-radius:8px; font-size:.85rem; width:100%; background:#fff; font-family:inherit; }
+  input, select, textarea { padding:7px 9px; border:1px solid #cbd5e1; border-radius:8px; font-size:.85rem; width:100%; font-family:inherit; }
   .btn { padding:8px 14px; border-radius:8px; border:none; background:#2563eb; color:#fff; cursor:pointer; font-size:.85rem; }
   .btn.danger { background:#dc2626; } .btn.ghost { background:#e2e8f0; color:#0f172a; }
-  .btn:disabled { opacity:.5; cursor:not-allowed; }
   .tag { padding:2px 8px; border-radius:999px; font-size:.72rem; background:#e2e8f0; }
   .tag.ok { background:#dcfce7; color:#166534; } .tag.warn { background:#fef3c7; color:#92400e; } .tag.err { background:#fee2e2; color:#991b1b; }
-  .toast { position:fixed; bottom:16px; right:16px; background:#0f172a; color:#fff; padding:12px 16px; border-radius:10px; font-size:.85rem; max-width:340px; box-shadow:0 8px 24px rgba(0,0,0,.25); z-index:60; }
-  .bar { background:#2563eb; height:14px; border-radius:4px; }
-  .barrow { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:.8rem; }
-  .barrow .lbl { width:150px; }
-  .barrow .track { flex:1; background:#f1f5f9; border-radius:4px; }
-  .alert { border:1px solid #cbd5e1; border-radius:10px; padding:12px 14px; background:#fff; margin-bottom:16px; font-size:.85rem; }
-  .alert b { display:block; margin-bottom:4px; }
-  ul.clean { margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#475569; }
-  #audit { max-height:180px; overflow:auto; font-size:.75rem; color:#475569; }
-  .notif { border:1px solid #e2e8f0; border-left:4px solid #2563eb; border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:.85rem; background:#fff; }
-  .notif.unread { background:#eff6ff; }
-  .notif .meta { color:#64748b; font-size:.72rem; margin-top:4px; }
-  .msg { max-width:70%; padding:9px 12px; border-radius:12px; font-size:.85rem; margin-bottom:6px; }
-  .msg.me { background:#2563eb; color:#fff; margin-left:auto; }
-  .msg.other { background:#e2e8f0; }
-  .msg .t { font-size:.65rem; opacity:.7; margin-top:3px; }
-  #thread { max-height:320px; overflow:auto; padding:8px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; display:flex; flex-direction:column; }
-  /* Connexion */
+  .toast { position:fixed; bottom:16px; right:16px; background:#0f172a; color:#fff; padding:12px 16px; border-radius:10px; font-size:.85rem; max-width:340px; z-index:60; }
   #loginWrap { max-width:380px; margin:8vh auto; }
-  #loginWrap .card { box-shadow:0 10px 30px rgba(0,0,0,.08); }
-  /* Impression */
+  @media print { body > *:not(#printArea) { display:none !important; } #printArea { display:block !important; } .ph { page-break-after:always; } }
   #printArea { display:none; }
-  @media print {
-    body > *:not(#printArea) { display:none !important; }
-    #printArea { display:block !important; }
-    body { background:#fff; padding:0; }
-    table { font-size:10pt; }
-    .ph { page-break-after:always; }
-  }
+  #thread { max-height:300px; overflow:auto; padding:8px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; display:flex; flex-direction:column; }
+  .msg { max-width:70%; padding:9px 12px; border-radius:12px; font-size:.85rem; margin-bottom:6px; }
+  .msg.me { background:#2563eb; color:#fff; align-self:flex-end; } .msg.other { background:#e2e8f0; align-self:flex-start; }
 </style>
 </head>
 <body>
 
-<div id="loginWrap" class="hidden">
+<!-- ⚙️ CONFIGURATION : collez ici vos valeurs Supabase (Settings → API) -->
+<script>
+const SUPABASE_URL = "https://VOTRE-PROJET.supabase.co";   // ← à remplacer
+const SUPABASE_ANON_KEY = "VOTRE_CLE_ANON";                // ← à remplacer (commence par eyJ...)
+</script>
+
+<div id="loginWrap">
   <div class="card">
-    <h2>🔐 Connexion — Tempos</h2>
-    <p class="muted" style="margin-top:0">Chaque salarié accède uniquement à ses propres informations.</p>
-    <div style="margin-bottom:10px"><label>Utilisateur</label><select id="loginUser"></select></div>
-    <div style="margin-bottom:12px"><label>Code d'accès</label><input type="password" id="loginPin" placeholder="Code personnel"></div>
+    <h3>🔐 Connexion — Tempos</h3>
+    <p class="muted">Chaque salarié accède uniquement à ses propres informations.</p>
+    <div style="margin-bottom:10px"><label>E-mail</label><input type="email" id="loginEmail" placeholder="prenom.nom@entreprise.fr"></div>
+    <div style="margin-bottom:12px"><label>Code d'accès</label><input type="password" id="loginPin"></div>
     <button class="btn" id="btnLogin" style="width:100%">Se connecter</button>
-    <p class="muted" style="margin-bottom:0">Démo : code <b>1234</b> pour tous les comptes.</p>
   </div>
 </div>
 
-<div id="shell" class="hidden">
+<div id="shell" style="display:none">
   <header>
-    <div>
-      <h1>⏱️ Tempos — Gestion du temps de travail</h1>
-      <div class="muted">Planning, saisies horaires, congés, échanges &amp; décomptes</div>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <span class="badge">🔐 RGPD</span>
-      <span id="whoami" class="badge blue"></span>
-      <button class="bell" id="btnBell">🔔<span class="cnt hidden" id="bellCnt"></span></button>
+    <div><h1>⏱️ Tempos — Gestion du temps de travail</h1><div class="muted">Application en ligne · données centralisées</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge">🔐 RGPD</span><span class="badge" id="whoami"></span>
       <button class="btn ghost" id="btnLogout">Déconnexion</button>
     </div>
   </header>
   <nav id="nav"></nav>
   <div id="app"></div>
 </div>
-
 <div id="toastHost"></div>
 <div id="printArea"></div>
 
 <script>
-// ---------- Modèle de données ----------
-const EMPLOYEES = [
-  { id:"e1", name:"David Szlachta", role:"admin", email:"david.szlachta@entreprise.fr", weekly:35 },
-  { id:"e2", name:"Claire Martin", role:"salarie", email:"claire.martin@entreprise.fr", weekly:35 },
-  { id:"e3", name:"Yassine Bakkali", role:"salarie", email:"y.bakkali@entreprise.fr", weekly:39 },
-  { id:"e4", name:"Sophie Nguyen", role:"salarie", email:"s.nguyen@entreprise.fr", weekly:24 },
-];
+// ================== INITIALISATION ==================
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TODAY = new Date().toISOString().slice(0,10);
 const MK = d => d.slice(0,7);
 
-function seed() {
-  return {
-    entries: [
-      {id:"s1",emp:"e2",date:"2026-10-05",start:"09:00",end:"17:30",pause:45},
-      {id:"s2",emp:"e2",date:"2026-10-06",start:"09:00",end:"18:00",pause:45},
-      {id:"s3",emp:"e3",date:"2026-10-05",start:"08:00",end:"17:00",pause:60},
-      {id:"s4",emp:"e3",date:"2026-10-06",start:"08:00",end:"18:30",pause:45},
-      {id:"s5",emp:"e4",date:"2026-10-05",start:"09:00",end:"13:00",pause:0},
-      {id:"s6",emp:"e2",date:"2026-11-02",start:"09:00",end:"17:30",pause:45},
-      {id:"s7",emp:"e3",date:"2026-11-02",start:"08:00",end:"17:00",pause:60},
-    ],
-    leaves: [
-      {id:"l1",emp:"e2",type:"Congé payé",start:"2026-12-21",end:"2026-12-25",days:5,status:"approuvé"},
-      {id:"l3",emp:"e4",type:"Maladie",start:"2026-10-14",end:"2026-10-15",days:2,status:"approuvé"},
-    ],
-    closed: ["2026-10"],
-    targets: {e1:1607,e2:1607,e3:1791,e4:1102},
-    pins: {e1:"1234",e2:"1234",e3:"1234",e4:"1234"},
-    notifs: [],
-    msgs: [],
-    remindersSent: {},
-    emailCfg: { smtp:"smtp.entreprise.fr:587", from:"tempos@entreprise.fr", weekly:"vendredi 17h00", monthly:"dernier jour du mois, 17h00" },
-    audit: [{ts:"2026-11-03 08:12",actor:"David Szlachta",act:"Clôture du mois 2026-10"}],
-  };
-}
-const store = {
-  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
-  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
-};
-let db;
-try { db = JSON.parse(store.get("tempos-db")) || seed(); if(!db || !db.entries) db = seed(); }
-catch(e){ db = seed(); }
-if(!db.pins) db.pins={e1:"1234",e2:"1234",e3:"1234",e4:"1234"};
-if(!db.notifs) db.notifs=[]; if(!db.msgs) db.msgs=[]; if(!db.remindersSent) db.remindersSent={};
-if(!db.emailCfg) db.emailCfg=seed().emailCfg;
-if(!db.monthlyStates) db.monthlyStates={};
-// Salariés ajoutés par l'administrateur (invitations)
-if(db.roster) db.roster.forEach(e=>{ if(!EMPLOYEES.some(x=>x.id===e.id)) EMPLOYEES.push(e); });
-function save(){ store.set("tempos-db", JSON.stringify(db)); }
-
-let me = null;
-let editingEntry=null, editingLeave=null, chatWith="e2";
+let db = { employees:[], entries:[], leaves:[], closed:[], audit:[], messages:[] };
+let me = null, tab = "dashboard", editingEntry=null, editingLeave=null, chatWith=null;
 
 const isAdmin = () => me && me.role==="admin";
-const isClosed = d => db.closed.includes(MK(d));
-const hrs = e => { if(!e.start||!e.end) return 0;
-  const [sh,sm]=e.start.split(":"),[eh,em]=e.end.split(":");
-  return Math.max(0,((eh*60+em)-(sh*60+sm)-(e.pause||0))/60); };
-const f = h => h.toFixed(2).replace(".",",")+" h";
-const empName = id => (EMPLOYEES.find(e=>e.id===id)||{}).name || "?";
-const empEmail = id => (EMPLOYEES.find(e=>e.id===id)||{}).email || "?";
+const isClosed = d => db.closed.some(c=>c.month===MK(d));
+const hrs = e => { if(!e.start_time||!e.end_time) return 0;
+  const [sh,sm]=e.start_time.split(":"),[eh,em]=e.end_time.split(":");
+  return Math.max(0,((eh*60+em)-(sh*60+sm)-(e.pause_min||0))/60); };
+const f = h => (+h).toFixed(2).replace(".",",")+" h";
+const empName = id => (db.employees.find(e=>e.id===id)||{}).name || "?";
 const wk = d => { const dt=new Date(d), s=new Date(dt.getFullYear(),0,1);
   return dt.getFullYear()+"-S"+String(Math.ceil(((dt-s)/864e5+s.getDay()+1)/7)).padStart(2,"0"); };
-
-function easter(y){
-  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
-        g=Math.floor((b+8)/25),h=(19*a+b-g-Math.floor((b-g+1)/3)+15)%30,
-        i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
-        month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
-  return new Date(y,month-1,day);
-}
-function frenchHolidays(y){
-  const e=easter(y), add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
-  const iso=d=>d.toISOString().slice(0,10);
-  return [y+"-01-01", iso(add(e,1)), y+"-05-01", y+"-05-08", iso(add(e,39)),
-    iso(add(e,50)), y+"-07-14", y+"-08-15", y+"-11-01", y+"-11-11", y+"-12-25"];
-}
-const holidaySet=(()=>{ const s=new Set(); for(let y=2024;y<=2030;y++) frenchHolidays(y).forEach(d=>s.add(d)); return s; })();
-const isHoliday = d => holidaySet.has(d);
-const isSunday = d => new Date(d+"T00:00:00").getDay()===0;
-function workingDays(start,end){
-  let n=0; const d=new Date(start+"T00:00:00"), stop=new Date(end+"T00:00:00");
+function easter(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+  g=Math.floor((b+8)/25),h=(19*a+b-g-Math.floor((b-g+1)/3)+15)%30,i=Math.floor(c/4),k=c%4,
+  l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+  mo=Math.floor((h+l-7*m+114)/31),dy=((h+l-7*m+114)%31)+1; return new Date(y,mo-1,dy); }
+const holidaySet=(()=>{ const s=new Set();
+  for(let y=2024;y<=2032;y++){ const e=easter(y),add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n),iso=d=>d.toISOString().slice(0,10);
+    [y+"-01-01",iso(add(e,1)),y+"-05-01",y+"-05-08",iso(add(e,39)),iso(add(e,50)),y+"-07-14",y+"-08-15",y+"-11-01",y+"-11-11",y+"-12-25"].forEach(d=>s.add(d)); }
+  return s; })();
+function workingDays(start,end){ let n=0; const d=new Date(start+"T00:00:00"),stop=new Date(end+"T00:00:00");
   while(d<=stop){ const iso=d.toISOString().slice(0,10);
-    if(!isSunday(iso)&&!isHoliday(iso)) n++; d.setDate(d.getDate()+1); }
-  return n;
-}
+    if(new Date(d).getDay()!==0 && !holidaySet.has(iso)) n++; d.setDate(d.getDate()+1); } return n; }
 
-function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg;
+function toast(m){ const t=document.createElement("div"); t.className="toast"; t.textContent=m;
   document.getElementById("toastHost").appendChild(t); setTimeout(()=>t.remove(),3500); }
-function log(act){ db.audit.unshift({ts:TODAY+" "+new Date().toTimeString().slice(0,5),actor:me?me.name:"?",act}); save(); }
-function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function audit(action){ await sb.from("audit_log").insert({actor:me?me.name:"système",action}); }
 
-// ---------- Notifications "e-mail" ----------
-// Chaque notification simule un e-mail : destinataire = boîte mail du salarié/admin.
-// L'envoi réel (SMTP) sera branché côté serveur lors de l'intégration.
-function sendMail(toEmpId, subject, body, attach){
-  db.notifs.unshift({id:"n"+Date.now()+Math.random().toString(36).slice(2,6),to:toEmpId,subject,body,date:TODAY+" "+new Date().toTimeString().slice(0,5),read:false,attach:attach||null});
-  save();
-}
-function unreadCount(){ return db.notifs.filter(n=>n.to===me.id&&!n.read).length; }
-function myMsgsUnread(){ return db.msgs.filter(m=>m.empId===me.id && (isAdmin()? m.from==="salarie"&&!m.readByAdmin : m.from==="admin"&&!m.readByEmp)).length; }
-
-// Rappels automatiques : hebdo (salariés) + mensuel (admin)
-function checkReminders(){
-  const now=new Date(), day=now.getDay();
-  const wkKey=wk(TODAY), mKey=MK(TODAY);
-  // Rappel hebdomadaire de fin de semaine (vendredi/week-end) aux salariés
-  if(day>=5){
-    EMPLOYEES.filter(e=>e.role==="salarie").forEach(e=>{
-      const key="w-"+wkKey+"-"+e.id;
-      if(!db.remindersSent[key]){
-        const missing=[];
-        for(let i=0;i<5;i++){ const d=new Date(now); d.setDate(d.getDate()-i);
-          const iso=d.toISOString().slice(0,10);
-          if(d.getDay()!==0 && !isHoliday(iso) && !db.entries.some(x=>x.emp===e.id&&x.date===iso)) missing.push(iso); }
-        db.remindersSent[key]=true;
-        sendMail(e.id, "⏰ Rappel — saisie de vos heures de la semaine",
-          missing.length? "Bonjour "+e.name.split(" ")[0]+",\n\nPensez à saisir vos heures pour la semaine "+wkKey+". Jours manquants : "+missing.join(", ")+".\n\nTempos"
-                        : "Bonjour "+e.name.split(" ")[0]+",\n\nVos heures de la semaine "+wkKey+" sont complètes. Merci !\n\nTempos");
-      }
-    });
-  }
-  // Rappel mensuel de clôture à l'administrateur (fin de mois / début de mois suivant)
-  const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  if(now.getDate()>=lastDay-1 || now.getDate()<=3){
-    const key="m-"+mKey+"-admin";
-    if(!db.remindersSent[key]){
-      db.remindersSent[key]=true;
-      const n=db.entries.filter(e=>MK(e.date)===mKey&&e.status==="brouillon").length;
-      sendMail("e1","📩 Clôture mensuelle — vérifiez et verrouillez les heures de "+mKey,
-        "Bonjour,\n\nLe mois "+mKey+" touche à sa fin. "+(n? n+" saisie(s) sont en attente de validation.":"Toutes les saisies sont validées.")+
-        "\nConnectez-vous à Tempos > Administration pour vérifier puis clôturer le mois.\n\nTempos");
-    }
-  }
-  // États mensuels automatiques (PDF) envoyés à l'administrateur
-  if(now.getDate()<=3 || now.getDate()>=lastDay-1){
-    const prev=new Date(now.getFullYear(),now.getMonth()-(now.getDate()<=3?1:0),1);
-    const pmk=prev.toISOString().slice(0,7);
-    if(!db.monthlyStates[pmk]){
-      db.monthlyStates[pmk]=true;
-      sendMail("e1","📊 États mensuels "+pmk+" — à enregistrer en PDF (pièces jointes)",
-        "Bonjour,\n\nVeuillez trouver les états mensuels de "+pmk+" pour l'ensemble des salariés, au format PDF :\n\n"+
-        EMPLOYEES.map(e=>"• bilan-"+e.name.toLowerCase().replace(/\s+/g,"-")+"-"+pmk+".pdf").join("\n")+
-        "\n\nChaque état détaille les heures par semaine, les absences et le récapitulatif annuel.\nOuvrez Tempos > Notifications pour télécharger chaque état.\n\nTempos — envoi automatique",
-        {type:"states",mk:pmk});
-      EMPLOYEES.forEach(e=>{ db.monthlyStates[pmk+"|"+e.id]=true; });
-    }
-  }
-  save();
+async function loadAll(){
+  const [emp,en,lv,cl,au,ms]=await Promise.all([
+    sb.from("employees").select("*").order("name"),
+    sb.from("entries").select("*").order("date",{ascending:false}).limit(200),
+    sb.from("leaves").select("*").order("start_date",{ascending:false}),
+    sb.from("closed_months").select("*"),
+    sb.from("audit_log").select("*").order("ts",{ascending:false}).limit(80),
+    sb.from("messages").select("*").order("created_at"),
+  ]);
+  if(emp.error||en.error||lv.error||cl.error) { toast("⛔ Erreur de connexion à la base : "+((emp.error||en.error||lv.error||cl.error).message)); return false; }
+  db={ employees:emp.data, entries:en.data, leaves:lv.data, closed:cl.data, audit:au.data||[], messages:ms.data||[] };
+  return true;
 }
 
-// ---------- Connexion ----------
-const loginWrap=document.getElementById("loginWrap"), shell=document.getElementById("shell");
-const loginUser=document.getElementById("loginUser");
-function refreshLoginOptions(sel){
-  loginUser.innerHTML=EMPLOYEES.map(e=>`<option value="${e.id}" ${e.id===sel?"selected":""}>${esc(e.name)}${e.role==="admin"?" (administrateur)":""}</option>`).join("");
-}
-refreshLoginOptions();
-document.getElementById("btnLogin").addEventListener("click",()=>{
-  refreshLoginOptions(loginUser.value);
-  const u=EMPLOYEES.find(e=>e.id===loginUser.value);
-  if(db.pins[u.id]!==document.getElementById("loginPin").value) return toast("⛔ Code d'accès incorrect.");
+// ================== CONNEXION ==================
+document.getElementById("btnLogin").addEventListener("click",async()=>{
+  const email=document.getElementById("loginEmail").value.trim().toLowerCase();
+  const pin=document.getElementById("loginPin").value;
+  if(!await loadAll()) return;
+  const u=db.employees.find(e=>e.email.toLowerCase()===email && e.pin===pin);
+  if(!u) return toast("⛔ E-mail ou code d'accès incorrect.");
   me=u; document.getElementById("loginPin").value="";
-  checkReminders(); tab="dashboard"; render();
-  toast("👋 Bienvenue, "+u.name.split(" ")[0]+".");
+  tab="dashboard"; render(); toast("👋 Bienvenue, "+u.name.split(" ")[0]+".");
 });
-document.getElementById("loginPin").addEventListener("keydown",ev=>{ if(ev.key==="Enter") document.getElementById("btnLogin").click(); });
-document.getElementById("btnLogout").addEventListener("click",()=>{ me=null; refreshLoginOptions(); loginWrap.classList.remove("hidden"); shell.classList.add("hidden"); });
+document.getElementById("btnLogout").addEventListener("click",()=>{ me=null;
+  document.getElementById("shell").style.display="none";
+  document.getElementById("loginWrap").style.display="block"; });
 
-// ---------- Bilan mensuel ----------
+// ================== BILAN MENSUEL ==================
 function buildReport(empId,mk){
-  const emp=EMPLOYEES.find(e=>e.id===empId);
-  const list=db.entries.filter(e=>e.emp===empId&&MK(e.date)===mk).sort((a,b)=>a.date.localeCompare(b.date));
+  const emp=db.employees.find(e=>e.id===empId);
+  const list=db.entries.filter(e=>e.employee_id===empId&&MK(e.date)===mk).sort((a,b)=>a.date.localeCompare(b.date));
   const weeks={}; list.forEach(e=>{ const w=wk(e.date); (weeks[w]=weeks[w]||[]).push(e); });
-  const monthTotal=list.reduce((s,e)=>s+hrs(e),0);
-  const lv=db.leaves.filter(l=>l.emp===empId&&(MK(l.start)===mk||MK(l.end)===mk||l.start<=mk+"-31"&&l.end>=mk+"-01"));
-  const lvDays=lv.reduce((s,l)=>s+workingDays(l.start,l.end),0);
-  const cumul=db.entries.filter(e=>e.emp===empId).reduce((s,e)=>s+hrs(e),0);
+  const tot=list.reduce((s,e)=>s+hrs(e),0);
+  const lv=db.leaves.filter(l=>l.employee_id===empId&&l.start_date<=mk+"-31"&&l.end_date>=mk+"-01");
+  const cumul=db.entries.filter(e=>e.employee_id===empId).reduce((s,e)=>s+hrs(e),0);
   let h=`<div class="ph"><h2>Bilan mensuel — ${emp.name} — ${mk}</h2>
-  <p style="font-size:9pt;color:#475569">Document généré par Tempos · ${TODAY} · Confidentiel (données personnelles)</p>`;
-  if(!list.length) h+=`<p>Aucune saisie pour ce mois.</p>`;
+  <p style="font-size:9pt;color:#475569">Généré par Tempos · ${TODAY} · Confidentiel</p>`;
   Object.keys(weeks).sort().forEach(w=>{
     const wt=weeks[w].reduce((s,e)=>s+hrs(e),0);
-    h+=`<h3 style="font-size:10pt;margin:10pt 0 4pt">Semaine ${w} — total ${f(wt)}</h3>
-    <table border="0" cellpadding="3" style="width:100%"><tr style="background:#eef2f7"><th>Date</th><th>Jour</th><th>Arrivée</th><th>Départ</th><th>Pause</th><th>Total</th></tr>`+
-    weeks[w].map(e=>{ const J=["dim","lun","mar","mer","jeu","ven","sam"][new Date(e.date+"T00:00:00").getDay()];
-      return `<tr><td>${e.date}</td><td>${J}</td><td>${e.start}</td><td>${e.end}</td><td>${e.pause} min</td><td><b>${f(hrs(e))}</b></td></tr>`; }).join("")+`</table>`;
+    h+=`<h3 style="font-size:10pt">Semaine ${w} — total ${f(wt)}</h3>
+    <table border="0" cellpadding="3" style="width:100%"><tr style="background:#eef2f7"><th>Date</th><th>Arrivée</th><th>Départ</th><th>Pause</th><th>Total</th></tr>`+
+    weeks[w].map(e=>`<tr><td>${e.date}</td><td>${e.start_time}</td><td>${e.end_time}</td><td>${e.pause_min} min</td><td><b>${f(hrs(e))}</b></td></tr>`).join("")+"</table>";
   });
-  h+=`<h3 style="font-size:10pt;margin:12pt 0 4pt">Absences du mois</h3>
-  ${lv.length?`<table border="0" cellpadding="3" style="width:100%"><tr style="background:#eef2f7"><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>`+
-    lv.map(l=>`<tr><td>${l.type}</td><td>${l.start}</td><td>${l.end}</td><td>${workingDays(l.start,l.end)} j</td><td>${l.status}</td></tr>`).join("")+`</table>`:`<p style="font-size:9pt">Aucune absence.</p>`}
-  <h3 style="font-size:10pt;margin:12pt 0 4pt">Récapitulatif</h3>
-  <table border="0" cellpadding="3"><tr><td>Total heures du mois</td><td><b>${f(monthTotal)}</b></td></tr>
-  <tr><td>Jours d'absence (ouvrés)</td><td>${lvDays} j</td></tr>
-  <tr><td>Cumul annuel / objectif</td><td>${f(cumul)} / ${db.targets[empId]} h</td></tr></table></div>`;
+  h+=`<h3 style="font-size:10pt">Absences du mois</h3>`+(lv.length?`<table border="0" cellpadding="3"><tr style="background:#eef2f7"><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>`+
+    lv.map(l=>`<tr><td>${l.type}</td><td>${l.start_date}</td><td>${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td><td>${l.status}</td></tr>`).join("")+"</table>":"<p style='font-size:9pt'>Aucune.</p>")+
+  `<h3 style="font-size:10pt">Récapitulatif</h3><table border="0" cellpadding="3">
+   <tr><td>Total heures du mois</td><td><b>${f(tot)}</b></td></tr>
+   <tr><td>Cumul annuel / objectif</td><td>${f(cumul)} / ${emp.annual_target} h</td></tr></table></div>`;
   return h;
 }
-function printReport(empId,mk){ document.getElementById("printArea").innerHTML=buildReport(empId,mk); setTimeout(()=>window.print(),50); }
-function downloadReport(empId,mk){
-  try{ const doc="<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>Bilan "+empName(empId)+" "+mk+"</title><style>body{font-family:system-ui,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:10pt}th,td{border:1px solid #cbd5e1;padding:4px 8px;text-align:left}th{background:#eef2f7}h2{border-bottom:2px solid #0f172a;padding-bottom:6px}</style></head><body>"+buildReport(empId,mk)+"</body></html>";
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([doc],{type:"text/html"}));
-    a.download="bilan-"+empName(empId).replace(/\s+/g,"-").toLowerCase()+"-"+mk+".html";
-    document.body.appendChild(a); a.click(); a.remove(); toast("📥 Bilan téléchargé.");
-  }catch(e){ toast("⚠️ Téléchargement bloqué ici — utilisez « Imprimer »."); }
-}
-function printAll(mk){ document.getElementById("printArea").innerHTML=EMPLOYEES.map(e=>buildReport(e.id,mk)).join(""); setTimeout(()=>window.print(),50); }
-function downloadAll(mk){
-  try{ const doc="<!doctype html><html lang='fr'><head><meta charset='utf-8'><title>Bilans "+mk+"</title><style>body{font-family:system-ui,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:10pt}th,td{border:1px solid #cbd5e1;padding:4px 8px;text-align:left}th{background:#eef2f7}h2{border-bottom:2px solid #0f172a;padding-bottom:6px}.ph{page-break-after:always}</style></head><body>"+EMPLOYEES.map(e=>buildReport(e.id,mk)).join("")+"</body></html>";
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([doc],{type:"text/html"}));
-    a.download="bilans-tous-salaries-"+mk+".html";
-    document.body.appendChild(a); a.click(); a.remove(); toast("📥 Bilans téléchargés.");
-  }catch(e){ toast("⚠️ Téléchargement bloqué ici — utilisez « Imprimer »."); }
-}
+function printReport(empId,mk){ document.getElementById("printArea").innerHTML=buildReport(empId,mk); setTimeout(()=>window.print(),80); }
+function printAll(mk){ document.getElementById("printArea").innerHTML=db.employees.map(e=>buildReport(e.id,mk)).join(""); setTimeout(()=>window.print(),80); }
 
-// ---------- Rendu ----------
+// ================== RENDU ==================
 function render(){
-  if(!me){ loginWrap.classList.remove("hidden"); shell.classList.add("hidden"); return; }
-  loginWrap.classList.add("hidden"); shell.classList.remove("hidden");
+  if(!me) return;
+  document.getElementById("loginWrap").style.display="none";
+  document.getElementById("shell").style.display="block";
   document.getElementById("whoami").textContent=me.name+(isAdmin()?" · Administrateur":" · Salarié");
-  const bell=document.getElementById("btnBell"), cnt=document.getElementById("bellCnt");
-  const uc=unreadCount();
-  cnt.textContent=uc; cnt.classList.toggle("hidden",uc===0);
-  bell.onclick=()=>{ tab="notifications"; render(); };
 
-  const NAV=[["dashboard","Tableau de bord"],["saisie","Saisie horaire"],["planning","Planning / Horaires"],["conges","Congés & Absences"],["echanges","Échanges ✉️"+(myMsgsUnread()?" ("+myMsgsUnread()+")":"")],["syntheses","Synthèses"],["bilan","Bilan mensuel 🖨️"],["notifications","Notifications 📬"],["admin","Administration 🔒"]];
-  const nav=document.getElementById("nav");
-  nav.innerHTML=NAV.map(([k,l])=>(k==="admin"&&!isAdmin())?"":`<button data-t="${k}" class="${tab===k?"active":""}">${l}</button>`).join("");
-  nav.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ tab=b.dataset.t; render(); }));
+  const NAV=[["dashboard","Tableau de bord"],["saisie","Saisie horaire"],["planning","Planning / Horaires"],["conges","Congés & Absences"],["echanges","Échanges ✉️"],["syntheses","Synthèses"],["bilan","Bilan mensuel 🖨️"],["admin","Administration 🔒"]];
+  document.getElementById("nav").innerHTML=NAV.map(([k,l])=>(k==="admin"&&!isAdmin())?"":`<button data-t="${k}" class="${tab===k?"active":""}">${l}</button>`).join("");
+  document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ tab=b.dataset.t; render(); });
 
   const app=document.getElementById("app");
-  const scopeEntries=()=>db.entries.filter(e=>isAdmin()||e.emp===me.id).sort((a,b)=>b.date.localeCompare(a.date));
-  const scopeLeaves=()=>db.leaves.filter(l=>isAdmin()||l.emp===me.id);
+  const scopeE=()=>db.entries.filter(e=>isAdmin()||e.employee_id===me.id);
+  const scopeL=()=>db.leaves.filter(l=>isAdmin()||l.employee_id===me.id);
+  const empSel=(selId)=>db.employees.map(e=>`<option value="${e.id}" ${e.id===selId?"selected":""}>${esc(e.name)}</option>`).join("");
 
-  function entryTable(list,withActions,editable){
-    return `<table><tr><th>Date</th><th>Salarié</th><th>Horaires</th><th>Total</th><th>Statut</th>${withActions?"<th></th>":""}</tr>`+
-      list.map(e=>`<tr><td>${e.date}</td><td>${esc(empName(e.emp))}</td><td>${e.start} – ${e.end} (pause ${e.pause} min)</td><td><b>${f(hrs(e))}</b></td>
-        <td><span class="tag ${e.status==="validé"?"ok":"warn"}">${e.status}</span></td>
-        ${withActions?`<td>${!isClosed(e.date)?`<button class="btn ghost" data-del="${e.id}">🗑️</button> ${editable?`<button class="btn ghost" data-edit="${e.id}">✏️</button>`:""}`:""}</td>`:""}</tr>`).join("")+"</table>";
+  function entryTable(list){
+    return `<table><tr><th>Date</th><th>Salarié</th><th>Horaires</th><th>Total</th><th>Statut</th>${isAdmin()?"<th></th>":""}</tr>`+
+      list.slice(0,20).map(e=>`<tr><td>${e.date}</td><td>${esc(empName(e.employee_id))}</td><td>${e.start_time} – ${e.end_time} (pause ${e.pause_min} min)</td><td><b>${f(hrs(e))}</b></td>
+      <td><span class="tag ${e.status==="validé"?"ok":"warn"}">${e.status}</span></td>
+      ${isAdmin()?`<td>${!isClosed(e.date)?`<button class="btn ghost" data-del="${e.id}">🗑️</button>`:""}</td>`:""}</tr>`).join("")+"</table>";
   }
-
   let html="";
 
   if(tab==="dashboard"){
-    const missing=EMPLOYEES.filter(e=>e.role==="salarie"&&!db.entries.some(x=>x.emp===e.id&&x.date===TODAY));
-    const draft=db.entries.filter(e=>MK(e.date)===MK(TODAY)&&e.status==="brouillon"&&!isClosed(e.date)).length;
-    const mine=db.entries.filter(e=>e.emp===me.id);
+    const mine=db.entries.filter(e=>e.employee_id===me.id);
+    const draft=db.entries.filter(e=>MK(e.date)===MK(TODAY)&&e.status==="brouillon").length;
     const pend=db.leaves.filter(l=>l.status==="en attente").length;
     html=`<div class="grid">
-      ${isAdmin()?`<div class="card"><h3>🔔 Rappel de saisie</h3>${
-        missing.length===0?`<span style="color:#047857">✅ Tous les salariés ont saisi leurs heures du jour.</span>`:
-        `<span style="color:#b45309">⏰ ${missing.length} salarié(s) sans saisie du ${TODAY} :</span><ul class="clean">${missing.map(e=>`<li>${esc(e.name)}</li>`).join("")}</ul>`}</div>
-      <div class="card"><h3>📩 Notifications en cours</h3>
-        ${draft>0?`⚠️ <b>${draft}</b> saisie(s) attendent votre validation.`:`<span style="color:#047857">✅ Aucune saisie en attente.</span>`}
-        ${pend>0?`<br>📅 <b>${pend}</b> demande(s) de congé(s) à traiter.`:""}</div>`:
-      `<div class="card"><h3>🔔 Mon rappel de saisie</h3>${
-        db.entries.some(x=>x.emp===me.id&&x.date===TODAY)?`<span style="color:#047857">✅ Vos heures du jour sont saisies.</span>`
-        :`<span style="color:#b45309">⏰ Vous n'avez pas saisi vos heures du ${TODAY}. Un rappel vous est envoyé chaque fin de semaine par e-mail.</span>`}</div>`}
-      <div class="card"><h3>🗓️ Mois clôturés</h3>${
-        db.closed.length?db.closed.map(m=>`<span class="tag" style="margin-right:6px">🔒 ${m}</span>`).join(""):`<span class="muted">Aucun.</span>`}
-        <p class="muted" style="margin:8px 0 0">Aucune saisie possible sur un mois clôturé.</p></div>
-      <div class="card"><h3>👤 Mon récapitulatif</h3>
-        <p style="margin:0;font-size:.85rem">Mois en cours : <b>${f(mine.filter(e=>MK(e.date)===MK(TODAY)).reduce((s,e)=>s+hrs(e),0))}</b> ·
-        Cumul annuel : <b>${f(mine.reduce((s,e)=>s+hrs(e),0))}</b> / ${db.targets[me.id]} h</p></div>
-    </div>
-    <div class="card"><h3>${isAdmin()?"Dernières saisies (tous salariés)":"Mes dernières saisies"}</h3>${entryTable(scopeEntries().slice(0,12),false)}</div>`;
+      ${isAdmin()?`<div class="card"><h3>📩 À traiter</h3>
+        ${draft>0?`⚠️ <b>${draft}</b> saisie(s) du mois en cours attendent validation.<br>`:""}
+        ${pend>0?`📅 <b>${pend}</b> demande(s) de congé(s) en attente.`:""}
+        ${draft===0&&pend===0?'<span style="color:#047857">✅ Rien à traiter.</span>':""}</div>`:
+      `<div class="card"><h3>🔔 Ma saisie du jour</h3>${
+        mine.some(e=>e.date===TODAY)?'<span style="color:#047857">✅ Heures du jour saisies.</span>':'<span style="color:#b45309">⏰ Pensez à saisir vos heures du jour.</span>'}</div>`}
+      <div class="card"><h3>🗓️ Mois clôturés</h3>${db.closed.map(c=>`<span class="tag" style="margin-right:6px">🔒 ${c.month}</span>`).join("")||'<span class="muted">Aucun.</span>'}</div>
+      <div class="card"><h3>👤 Mon récapitulatif</h3><p style="margin:0;font-size:.85rem">Mois : <b>${f(mine.filter(e=>MK(e.date)===MK(TODAY)).reduce((s,e)=>s+hrs(e),0))}</b> · Année : <b>${f(mine.reduce((s,e)=>s+hrs(e),0))}</b> / ${me.annual_target} h</p></div>
+    </div><div class="card"><h3>${isAdmin()?"Dernières saisies (tous)":"Mes dernières saisies"}</h3>${entryTable(scopeE())}</div>`;
   }
 
   if(tab==="saisie"){
-    html=`<div class="alert"><b>✍️ Saisie quotidienne</b>Chaque salarié saisit ses heures chaque jour. ${isAdmin()?"En tant qu'administrateur, vous pouvez saisir et modifier les heures de tous les salariés.":"Vos saisies restent modifiables jusqu'à la clôture mensuelle."}</div>
-    <div class="card"><h3>${editingEntry?"✏️ Modifier la saisie":"Nouvelle saisie"}</h3>
-      <div class="grid">
-        <div><label>Date</label><input type="date" id="fDate" value="${editingEntry?(db.entries.find(e=>e.id===editingEntry)||{}).date||TODAY:TODAY}"></div>
-        ${isAdmin()?`<div><label>Salarié</label><select id="fEmp">${EMPLOYEES.map(e=>`<option value="${e.id}" ${editingEntry&&(db.entries.find(x=>x.id===editingEntry)||{}).emp===e.id?"selected":""}>${esc(e.name)}</option>`).join("")}</select></div>`:""}
-        <div><label>Arrivée</label><input type="time" id="fStart" value="${editingEntry?(db.entries.find(e=>e.id===editingEntry)||{}).start||"09:00":"09:00"}"></div>
-        <div><label>Départ</label><input type="time" id="fEnd" value="${editingEntry?(db.entries.find(e=>e.id===editingEntry)||{}).end||"17:00":"17:00"}"></div>
-        <div><label>Pause (min)</label><input type="number" id="fPause" value="${editingEntry?(db.entries.find(e=>e.id===editingEntry)||{}).pause??45:45}"></div>
-      </div>
-      <p style="margin:12px 0 0"><button class="btn" id="btnAddEntry">${editingEntry?"Mettre à jour":"Enregistrer la saisie"}</button>
-      ${editingEntry?`<button class="btn ghost" id="btnCancelEdit">Annuler</button>`:""}
-      <span id="lockMsg" class="muted" style="margin-left:10px"></span></p>
-    </div>
-    <div class="card"><h3>${isAdmin()?"Toutes les saisies":"Mes saisies"}</h3>${entryTable(scopeEntries().slice(0,25),true,isAdmin())}</div>`;
+    html=`<div class="alert" style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;font-size:.85rem;margin-bottom:12px"><b>✍️ Saisie quotidienne</b>${isAdmin()?" En tant qu'administrateur, vous saisissez pour n'importe quel salarié.":" Modifiable jusqu'à la clôture mensuelle."}</div>
+    <div class="card"><h3>Nouvelle saisie</h3><div class="grid">
+      ${isAdmin()?`<div><label>Salarié</label><select id="fEmp">${empSel(me.id)}</select></div>`:""}
+      <div><label>Date</label><input type="date" id="fDate" value="${TODAY}"></div>
+      <div><label>Arrivée</label><input type="time" id="fStart" value="09:00"></div>
+      <div><label>Départ</label><input type="time" id="fEnd" value="17:00"></div>
+      <div><label>Pause (min)</label><input type="number" id="fPause" value="45"></div>
+    </div><p><button class="btn" id="btnAddEntry">Enregistrer</button> <span id="lockMsg" class="muted"></span></p></div>
+    <div class="card"><h3>${isAdmin()?"Toutes les saisies":"Mes saisies"}</h3>${entryTable(scopeE())}</div>`;
   }
 
   if(tab==="planning"){
-    html=`<div class="card"><h3>Horaires contractuels</h3><table>
-      <tr><th>Salarié</th><th>Rôle</th><th>Heures / semaine</th><th>Volume annuel cible</th></tr>
-      ${EMPLOYEES.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td><span class="tag ${e.role==="admin"?"ok":""}">${e.role==="admin"?"Administrateur":"Salarié"}</span></td><td>${e.weekly} h</td><td>${db.targets[e.id]} h / an</td></tr>`).join("")}
-    </table></div>
-    <div class="card"><h3>Absences à venir</h3><table>
-      <tr><th>Salarié</th><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>
-      ${db.leaves.filter(l=>l.end>=TODAY).map(l=>`<tr><td>${esc(empName(l.emp))}</td><td>${l.type}</td><td>${l.start}</td><td>${l.end}</td><td>${workingDays(l.start,l.end)} j</td><td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td></tr>`).join("")}
-    </table></div>`;
+    html=`<div class="card"><h3>Horaires contractuels</h3><table><tr><th>Salarié</th><th>Rôle</th><th>H/semaine</th><th>Objectif annuel</th></tr>
+      ${db.employees.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td><span class="tag ${e.role==="admin"?"ok":""}">${e.role==="admin"?"Administrateur":"Salarié"}</span></td><td>${e.weekly_hours} h</td><td>${e.annual_target} h</td></tr>`).join("")}</table></div>
+    <div class="card"><h3>Absences à venir</h3><table><tr><th>Salarié</th><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>
+      ${db.leaves.filter(l=>l.end_date>=TODAY).map(l=>`<tr><td>${esc(empName(l.employee_id))}</td><td>${l.type}</td><td>${l.start_date}</td><td>${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td><td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td></tr>`).join("")}</table></div>`;
   }
 
   if(tab==="conges"){
-    const TYPES=["Congé payé","RTT","Maladie","Sans solde","Formation"];
-    const cur=editingLeave?db.leaves.find(l=>l.id===editingLeave):null;
-    html=`<div class="alert"><b>📅 Décompte automatique</b>Le nombre de jours exclut les dimanches et les jours fériés français. Chaque demande notifie l'administrateur par e-mail ; la décision vous est notifiée en retour.</div>
-    <div class="card"><h3>${editingLeave?"✏️ Modifier la demande":"Nouvelle demande d'absence"}</h3>
-      <div class="grid">
-        <div><label>Type</label><select id="lType">${TYPES.map(t=>`<option ${cur&&cur.type===t?"selected":""}>${t}</option>`).join("")}</select></div>
-        <div><label>Du</label><input type="date" id="lStart" value="${cur?cur.start:TODAY}"></div>
-        <div><label>Au</label><input type="date" id="lEnd" value="${cur?cur.end:TODAY}"></div>
-      </div>
-      <p style="margin:12px 0 0"><button class="btn" id="btnAddLeave">${editingLeave?"Mettre à jour":"Envoyer la demande"}</button>
-      ${editingLeave?`<button class="btn ghost" id="btnCancelLeave">Annuler</button>`:""}
-      <span id="leaveDays" class="muted" style="margin-left:10px"></span></p></div>
+    html=`<div class="card"><h3>Nouvelle demande d'absence</h3><div class="grid">
+      <div><label>Type</label><select id="lType"><option>Congé payé</option><option>RTT</option><option>Maladie</option><option>Sans solde</option><option>Formation</option></select></div>
+      <div><label>Du</label><input type="date" id="lStart" value="${TODAY}"></div>
+      <div><label>Au</label><input type="date" id="lEnd" value="${TODAY}"></div>
+    </div><p><button class="btn" id="btnAddLeave">Envoyer la demande</button> <span id="leaveDays" class="muted"></span></p></div>
     <div class="card"><h3>${isAdmin()?"Toutes les demandes":"Mes demandes"}</h3><table>
       <tr><th>Salarié</th><th>Type</th><th>Période</th><th>Jours ouvrés</th><th>Statut</th>${isAdmin()?"<th>Décision</th>":""}</tr>
-      ${scopeLeaves().map(l=>`<tr><td>${esc(empName(l.emp))}</td><td>${l.type}</td><td>${l.start} → ${l.end}</td><td>${workingDays(l.start,l.end)} j</td>
-        <td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td>
-        ${isAdmin()?`<td>${l.status==="en attente"?`<button class="btn" data-ok="${l.id}">✅</button> <button class="btn danger" data-no="${l.id}">❌</button> `:""}<button class="btn ghost" data-leave-edit="${l.id}">✏️</button></td>`:""}</tr>`).join("")}
-    </table></div>`;
+      ${scopeL().map(l=>`<tr><td>${esc(empName(l.employee_id))}</td><td>${l.type}</td><td>${l.start_date} → ${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td>
+      <td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td>
+      ${isAdmin()&&l.status==="en attente"?`<td><button class="btn" data-ok="${l.id}">✅</button> <button class="btn danger" data-no="${l.id}">❌</button></td>`:isAdmin()?"<td></td>":""}</tr>`).join("")}</table></div>`;
   }
 
   if(tab==="echanges"){
-    const others=EMPLOYEES.filter(e=>e.id!=="e1");
-    const active=isAdmin()?(chatWith||"e2"):me.id;
-    const thread=db.msgs.filter(m=>m.empId===active).sort((a,b)=>a.ts.localeCompare(b.ts));
-    html=`<div class="alert"><b>✉️ Échanges écrits</b>Espace de demandes et d'échanges entre le salarié et l'administrateur. ${isAdmin()?"Sélectionnez le salarié concerné.":"Vos messages sont adressés à l'administrateur."}</div>
-    <div class="card">
-      ${isAdmin()?`<div style="margin-bottom:10px"><label>Salarié</label><select id="chatEmp">${others.map(e=>`<option value="${e.id}" ${active===e.id?"selected":""}>${esc(e.name)}</option>`).join("")}</select></div>`:""}
-      <div id="thread">${thread.length?thread.map(m=>`<div class="msg ${m.from==="salarie"?"other":"me"}" style="${m.from==="salarie"?"align-self:flex-start":"align-self:flex-end"}">
-        ${esc(m.text)}<div class="t">${m.ts} · ${m.from==="salarie"?esc(empName(m.empId)):"Administrateur"}</div></div>`).join(""):`<span class="muted">Aucun message pour l'instant.</span>`}</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <textarea id="msgText" rows="2" placeholder="Votre message…"></textarea>
-        <button class="btn" id="btnSend" style="align-self:flex-end">Envoyer</button>
-      </div></div>`;
+    const active=isAdmin()?(chatWith||(db.employees.find(e=>e.role!=="admin")||{}).id):me.id;
+    const thread=db.messages.filter(m=>m.employee_id===active);
+    html=`<div class="card"><h3>✉️ Échanges ${isAdmin()?"— sélectionnez un salarié":"avec l'administrateur"}</h3>
+      ${isAdmin()?`<div style="margin-bottom:10px"><label>Salarié</label><select id="chatEmp">${db.employees.filter(e=>e.role!=="admin").map(e=>`<option value="${e.id}" ${e.id===active?"selected":""}>${esc(e.name)}</option>`).join("")}</select></div>`:""}
+      <div id="thread">${thread.map(m=>`<div class="msg ${m.sender==="salarie"?"other":"me"}">${esc(m.body)}<div style="font-size:.65rem;opacity:.7">${new Date(m.created_at).toLocaleString("fr-FR")}</div></div>`).join("")||'<span class="muted">Aucun message.</span>'}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><textarea id="msgText" rows="2" placeholder="Votre message…"></textarea>
+      <button class="btn" id="btnSend" style="align-self:flex-end">Envoyer</button></div></div>`;
   }
 
   if(tab==="syntheses"){
-    const scope=isAdmin()?EMPLOYEES:[me];
+    const scope=isAdmin()?db.employees:[me];
     const weeks={};
-    db.entries.filter(e=>isAdmin()||e.emp===me.id).forEach(e=>{ const w=wk(e.date); (weeks[w]=weeks[w]||{})[e.emp]=(weeks[w][e.emp]||0)+hrs(e); });
-    const wks=Object.keys(weeks).sort();
-    const maxW=Math.max(1,...wks.flatMap(w=>Object.values(weeks[w])));
-    const COLORS={e1:"#2563eb",e2:"#16a34a",e3:"#d97706",e4:"#9333ea"};
-    html=(isAdmin()?`<div class="card"><h3>📊 Décompte hebdomadaire des heures (tous salariés)</h3>
-      ${wks.map(w=>`<div style="margin-bottom:10px"><b style="font-size:.8rem">${w}</b>
-        ${EMPLOYEES.map(e=>weeks[w][e.emp]?`<div class="barrow"><span class="lbl">${esc(e.name.split(" ")[0])}</span>
-          <span class="track"><span class="bar" style="width:${weeks[w][e.emp]/maxW*100}%;background:${COLORS[e.id]}"></span></span>
-          <b>${f(weeks[w][e.emp])}</b></div>`:"").join("")}</div>`).join("")||`<span class="muted">Aucune donnée.</span>`}</div>`:"")+
+    scopeE().forEach(e=>{ const w=wk(e.date); (weeks[w]=weeks[w]||{})[e.employee_id]=(weeks[w][e.employee_id]||0)+hrs(e); });
+    const wks=Object.keys(weeks).sort(), maxW=Math.max(1,...wks.flatMap(w=>Object.values(weeks[w])));
+    const COLORS=["#2563eb","#16a34a","#d97706","#9333ea","#0891b2"];
+    html=(isAdmin()?`<div class="card"><h3>📊 Décompte hebdomadaire</h3>${wks.map(w=>`<div style="margin-bottom:8px"><b style="font-size:.8rem">${w}</b>
+      ${db.employees.map((e,i)=>weeks[w][e.id]?`<div style="display:flex;align-items:center;gap:8px;font-size:.8rem;margin:4px 0"><span style="width:110px">${esc(e.name.split(" ")[0])}</span>
+      <span style="flex:1;background:#f1f5f9;border-radius:4px"><span style="display:block;height:14px;width:${weeks[w][e.id]/maxW*100}%;background:${COLORS[i%5]};border-radius:4px"></span></span><b>${f(weeks[w][e.id])}</b></div>`:"").join("")}</div>`).join("")||"<span class='muted'>Aucune donnée.</span>"}</div>`:"")+
     `<div class="card"><h3>${isAdmin()?"Synthèse annuelle — tous salariés":"Ma synthèse annuelle"}</h3><table>
-      <tr><th>Salarié</th><th>Mois en cours</th><th>Cumul annuel</th><th>Objectif</th><th>Avancement</th><th>Congés approuvés</th></tr>
-      ${scope.map(e=>{
-        const t=db.entries.filter(x=>x.emp===e.id);
-        const tot=t.reduce((s,x)=>s+hrs(x),0);
-        const mo=t.filter(x=>MK(x.date)===MK(TODAY)).reduce((s,x)=>s+hrs(x),0);
-        const pct=Math.min(100,tot/db.targets[e.id]*100);
-        const ld=db.leaves.filter(l=>l.emp===e.id&&l.status==="approuvé").reduce((s,l)=>s+workingDays(l.start,l.end),0);
-        return `<tr><td><b>${esc(e.name)}</b></td><td>${f(mo)}</td><td>${f(tot)}</td><td>${db.targets[e.id]} h</td>
-          <td><div class="track" style="width:120px;display:inline-block;vertical-align:middle"><div class="bar" style="width:${pct}%"></div></div> ${Math.round(pct)} %</td><td>${ld} j</td></tr>`;}).join("")}
-    </table></div>`;
+      <tr><th>Salarié</th><th>Mois en cours</th><th>Cumul annuel</th><th>Objectif</th><th>Avancement</th></tr>
+      ${scope.map(e=>{ const t=db.entries.filter(x=>x.employee_id===e.id);
+        const tot=t.reduce((s,x)=>s+hrs(x),0), mo=t.filter(x=>MK(x.date)===MK(TODAY)).reduce((s,x)=>s+hrs(x),0);
+        const pct=Math.min(100,tot/(e.annual_target||1)*100);
+        return `<tr><td><b>${esc(e.name)}</b></td><td>${f(mo)}</td><td>${f(tot)}</td><td>${e.annual_target} h</td>
+        <td><span style="background:#f1f5f9;border-radius:4px;width:100px;display:inline-block;vertical-align:middle"><span style="display:block;height:14px;width:${pct}%;background:#2563eb;border-radius:4px"></span></span> ${Math.round(pct)} %</td></tr>`;}).join("")}</table></div>`;
   }
 
   if(tab==="bilan"){
-    const scope=isAdmin()?EMPLOYEES:[me];
-    html=`<div class="alert"><b>🖨️ Bilan mensuel détaillé par semaine</b>Disponible à la clôture de chaque mois, pour chaque salarié (administrateur compris). Imprimable et téléchargeable.</div>
-    <div class="card"><h3>Générer un bilan</h3>
-      <div class="grid">
-        <div><label>Mois</label><input type="month" id="rMonth" value="${MK(TODAY)}"></div>
-        <div><label>Salarié</label><select id="rEmp">${isAdmin()?`<option value="all">— Tous les salariés —</option>`:""}${scope.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
-      </div>
-      <p style="margin:12px 0 0">
-        <button class="btn" id="btnPrint">🖨️ Imprimer</button>
-        <button class="btn ghost" id="btnDownload" style="margin-left:8px">📥 Télécharger (HTML)</button>
-      </p></div>
-    ${isAdmin()?`<div class="card"><h3>Mois clôturés — bilans disponibles</h3>${
-      db.closed.length?db.closed.map(m=>`<div style="margin:6px 0"><b>${m}</b>
-        ${EMPLOYEES.map(e=>`<button class="btn ghost" style="margin:2px" data-rprint="${e.id}|${m}">${esc(e.name.split(" ")[0])} 🖨️</button>`).join("")}
-        <button class="btn" style="margin-left:8px" data-rprint="all|${m}">Tous 🖨️</button></div>`).join("")
-      :`<span class="muted">Aucun mois clôturé pour l'instant.</span>`}</div>`:""}`;
-  }
-
-  if(tab==="notifications"){
-    const mine=db.notifs.filter(n=>n.to===me.id);
-    db.notifs.filter(n=>n.to===me.id).forEach(n=>n.read=true); save();
-    html=`<div class="alert"><b>📬 Centre de notifications</b>Chaque notification correspond à un e-mail envoyé sur la boîte du destinataire. Planification actuelle : rappel salarié chaque <b>${esc(db.emailCfg.weekly)}</b> · rappel administrateur chaque <b>${esc(db.emailCfg.monthly)}</b>.</div>
-    ${mine.length?mine.map(n=>`<div class="notif ${n.read?"":"unread"}">
-      <b>${esc(n.subject)}</b>
-      <div style="margin-top:4px;white-space:pre-line">${esc(n.body)}</div>
-      <div class="meta">À : ${esc(empEmail(n.to))} · ${n.date} · via ${esc(db.emailCfg.from)}</div>
-      ${n.attach&&n.attach.type==="states"?`<div style="margin-top:8px"><b style="font-size:.78rem">Pièces jointes (PDF) :</b>
-        ${EMPLOYEES.map(e=>`<button class="btn ghost" style="margin:3px" data-pdf="${e.id}|${n.attach.mk}">📄 ${esc(e.name.split(" ")[0])} — ${n.attach.mk}</button>`).join("")}
-        <button class="btn" style="margin:3px" data-pdfall="${n.attach.mk}">📄 Tous (un seul PDF)</button>
-        <p class="muted" style="margin:6px 0 0">La fenêtre d'impression s'ouvre : choisissez « Enregistrer au format PDF » comme destination.</p></div>`:""}
-      </div>`).join("")
-    :`<div class="card"><span class="muted">Aucune notification pour l'instant. Les rappels hebdomadaires et mensuels apparaîtront ici.</span></div>`}`;
+    const scope=isAdmin()?db.employees:[me];
+    html=`<div class="card"><h3>🖨️ Bilan mensuel détaillé par semaine</h3>
+      ${isAdmin()?`<div class="grid">
+      <div><label>Mois</label><input type="month" id="rMonth" value="${MK(TODAY)}"></div></div>
+      <p style="margin:10px 0 0">${db.employees.map(e=>`<button class="btn ghost" style="margin:3px" data-rprint="${e.id}">${esc(e.name)} 🖨️</button>`).join("")}
+      <button class="btn" style="margin-left:8px" id="btnAllPrint">Tous les salariés 🖨️</button></p>`
+      :`<div><label>Mois</label><input type="month" id="rMonth" value="${MK(TODAY)}"></div>
+      <p><button class="btn" id="btnMePrint">🖨️ Imprimer mon bilan</button></p>`}
+      <p class="muted" style="margin-bottom:0">Dans la fenêtre d'impression, choisissez « Enregistrer au format PDF » pour obtenir le fichier PDF.</p></div>`;
   }
 
   if(tab==="admin"){
-    html=`<div class="alert"><b>🔐 Accès administrateur général</b>Vous seul pouvez clôturer les mois, valider et modifier les heures, gérer les demandes et les codes d'accès.</div>
-    <div class="card"><h3>🔒 Clôture mensuelle</h3>
-      <button class="btn" id="btnClose" ${db.closed.includes(MK(TODAY))?"disabled":""}>Clôturer le mois en cours (${MK(TODAY)})</button>
-      <div style="margin-top:10px">${db.closed.map(m=>`<span class="tag" style="margin-right:8px">🔒 ${m} <a href="#" data-reopen="${m}" style="margin-left:4px">rouvrir</a></span>`).join("")}</div></div>
-    <div class="card"><h3>🎯 Volume horaire annuel par salarié</h3>
-      ${EMPLOYEES.map(e=>`<div class="barrow"><span class="lbl"><b>${esc(e.name)}</b></span>
-        <input type="number" style="width:110px" data-target="${e.id}" value="${db.targets[e.id]}"> <span class="muted">h / an</span></div>`).join("")}</div>
-    <div class="card"><h3>📨 Invitations des salariés</h3>
-      <p class="muted" style="margin-top:0">Envoie par e-mail à chaque salarié son identifiant (adresse mail) et le code d'accès que vous lui avez attribué.</p>
-      <table><tr><th>Salarié</th><th>E-mail</th><th>Code</th><th></th></tr>
-      ${EMPLOYEES.map(e=>`<tr><td><b>${esc(e.name)}</b></td>
-        <td><input type="text" data-email="${e.id}" value="${esc(e.email)}"></td>
-        <td><input type="text" style="width:90px" data-pin="${e.id}" value="${db.pins[e.id]||"1234"}"></td>
-        <td><button class="btn" data-invite="${e.id}">📨 Inviter</button> ${e.role!=="admin"?`<button class="btn danger" data-emp-del="${e.id}">Retirer</button>`:""}</td></tr>`).join("")}</table>
-      <p class="muted" style="margin:8px 0 0">L'e-mail d'invitation contient l'adresse de connexion, le code d'accès et le rappel que les données sont confidentielles.</p></div>
-    <div class="card"><h3>➕ Inviter un nouveau salarié</h3>
-      <div class="grid">
-        <div><label>Nom complet</label><input type="text" id="newName" placeholder="Prénom Nom"></div>
-        <div><label>Adresse e-mail</label><input type="text" id="newEmail" placeholder="prenom.nom@entreprise.fr"></div>
-        <div><label>Code d'accès initial</label><input type="text" id="newPin" placeholder="ex. 4821"></div>
-        <div><label>Heures / semaine</label><input type="number" id="newWeekly" value="35"></div>
-        <div><label>Volume annuel (h)</label><input type="number" id="newTarget" value="1607"></div>
-      </div>
-      <p style="margin:12px 0 0"><button class="btn" id="btnAddEmp">Créer le compte et envoyer l'invitation</button></p></div>
-    <div class="card"><h3>📧 Paramètres d'envoi des e-mails (à intégrer au serveur)</h3>
-      <div class="grid">
-        <div><label>Serveur SMTP</label><input type="text" value="${esc(db.emailCfg.smtp)}" data-cfg="smtp"></div>
-        <div><label>Expéditeur</label><input type="text" value="${esc(db.emailCfg.from)}" data-cfg="from"></div>
-        <div><label>Rappel hebdomadaire salariés</label><input type="text" value="${esc(db.emailCfg.weekly)}" data-cfg="weekly"></div>
-        <div><label>Rappel mensuel administrateur</label><input type="text" value="${esc(db.emailCfg.monthly)}" data-cfg="monthly"></div>
-      </div>
-      <p class="muted" style="margin:10px 0 0">Dans ce prototype, les e-mails sont simulés dans l'onglet « Notifications ». L'envoi réel vers les boîtes mail se branchera sur ce serveur SMTP lors de l'intégration backend.</p></div>
-    <div class="card"><h3>🛡️ Protection des données &amp; journal d'audit</h3>
-      <div class="grid">
-        <div><b style="font-size:.82rem">Mesures de sécurité</b><ul class="clean">
-          <li>Connexion individuelle par code d'accès</li><li>Chaque salarié ne voit que ses données</li>
-          <li>Chiffrement au repos et en transit (TLS)</li><li>Journal d'audit horodaté</li>
-          <li>Conformité RGPD (données sensibles)</li></ul></div>
-        <div><b style="font-size:.82rem">Journal d'audit</b><div id="audit">
-          ${db.audit.map(a=>`<div>[${a.ts}] <b>${esc(a.actor)}</b> — ${esc(a.act)}</div>`).join("")}</div></div>
-      </div></div>`;
+    html=`<div class="card"><h3>🔒 Clôture mensuelle</h3>
+      <button class="btn" id="btnClose" ${db.closed.some(c=>c.month===MK(TODAY))?"disabled":""}>Clôturer le mois en cours (${MK(TODAY)})</button>
+      <div style="margin-top:10px">${db.closed.map(c=>`<span class="tag" style="margin-right:8px">🔒 ${c.month}</span>`).join("")}</div></div>
+    <div class="card"><h3>🎯 Volumes horaires annuels &amp; comptes</h3><table>
+      <tr><th>Salarié</th><th>E-mail</th><th>Code</th><th>Objectif (h/an)</th><th></th></tr>
+      ${db.employees.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td>${esc(e.email)}</td>
+        <td><input type="text" style="width:80px" data-pin="${e.id}" value="${esc(e.pin)}"></td>
+        <td><input type="number" style="width:90px" data-target="${e.id}" value="${e.annual_target}"></td>
+        <td><button class="btn ghost" data-save-emp="${e.id}">💾</button>${e.id!==me.id?` <button class="btn danger" data-rm-emp="${e.id}">🗑️</button>`:""}</td></tr>`).join("")}</table></div>
+    <div class="card"><h3>➕ Inviter un nouveau salarié</h3><div class="grid">
+      <div><label>Nom</label><input id="newName" placeholder="Prénom Nom"></div>
+      <div><label>E-mail</label><input id="newEmail" placeholder="prenom.nom@entreprise.fr"></div>
+      <div><label>Code d'accès initial</label><input id="newPin" placeholder="ex. 4821"></div>
+    </div><p><button class="btn" id="btnAddEmp">Créer le compte</button></p></div>
+    <div class="card"><h3>🛡️ Journal d'audit</h3><div style="max-height:200px;overflow:auto;font-size:.75rem;color:#475569">
+      ${db.audit.map(a=>`<div>[${new Date(a.ts).toLocaleString("fr-FR")}] <b>${esc(a.actor)}</b> — ${esc(a.action)}</div>`).join("")}</div></div>`;
   }
 
   app.innerHTML=html;
 
-  // ---------- Événements ----------
-  app.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{
+  // ================== ÉVÉNEMENTS ==================
+  app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
     const e=db.entries.find(x=>x.id===b.dataset.del);
     if(isClosed(e.date)) return toast("⛔ Mois clôturé : suppression impossible.");
-    db.entries=db.entries.filter(x=>x.id!==e.id); save(); log("Suppression d'une saisie du "+e.date); toast("🗑️ Saisie supprimée."); render();
-  }));
-  app.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>{ editingEntry=b.dataset.edit; tab="saisie"; render(); }));
-  const btnCancelEdit=document.getElementById("btnCancelEdit");
-  if(btnCancelEdit) btnCancelEdit.addEventListener("click",()=>{ editingEntry=null; render(); });
-  const btnAddEntry=document.getElementById("btnAddEntry");
-  if(btnAddEntry) btnAddEntry.addEventListener("click",()=>{
-    const date=document.getElementById("fDate").value;
-    if(isClosed(date)) return toast("⛔ Mois clôturé : la saisie est verrouillée pour cette date.");
-    const emp=isAdmin()?(document.getElementById("fEmp")?document.getElementById("fEmp").value:me.id):me.id;
-    const data={emp,date,start:document.getElementById("fStart").value,end:document.getElementById("fEnd").value,pause:+document.getElementById("fPause").value||0};
-    if(hrs(data)<=0) return toast("⚠️ Horaires invalides.");
-    if(editingEntry){
-      const e=db.entries.find(x=>x.id===editingEntry);
-      if(isClosed(e.date)) return toast("⛔ Mois clôturé : modification impossible.");
-      Object.assign(e,data); editingEntry=null;
-      log(`Modification d'une saisie du ${date} (${empName(emp)})`); toast("✅ Saisie mise à jour.");
-    } else {
-      db.entries.push(Object.assign({id:"x"+Date.now(),status:"brouillon"},data));
-      log(`Saisie horaire du ${date} (${f(hrs(data))}) — ${empName(emp)}`);
-      toast("✅ Saisie enregistrée ("+f(hrs(data))+") — en attente de validation mensuelle.");
-    }
-    save(); render();
+    const {error}=await sb.from("entries").delete().eq("id",e.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Suppression d'une saisie du "+e.date); toast("🗑️ Saisie supprimée.");
+    await loadAll(); render();
   });
+  const btnAddEntry=document.getElementById("btnAddEntry");
+  if(btnAddEntry) btnAddEntry.onclick=async()=>{
+    const date=document.getElementById("fDate").value;
+    if(isClosed(date)) return toast("⛔ Mois clôturé : saisie verrouillée pour cette date.");
+    const emp=isAdmin()?(document.getElementById("fEmp")?document.getElementById("fEmp").value:me.id):me.id;
+    const data={id:"x"+Date.now(),employee_id:emp,date,start_time:document.getElementById("fStart").value,
+      end_time:document.getElementById("fEnd").value,pause_min:+document.getElementById("fPause").value||0,status:"brouillon"};
+    if(hrs(data)<=0) return toast("⚠️ Horaires invalides.");
+    const {error}=await sb.from("entries").insert(data);
+    if(error) return toast("⛔ "+error.message);
+    await audit(`Saisie horaire du ${date} (${f(hrs(data))}) — ${empName(emp)}`);
+    toast("✅ Saisie enregistrée ("+f(hrs(data))+")."); await loadAll(); render();
+  };
   const fDate=document.getElementById("fDate");
-  if(fDate){ const chk=()=>{ const m=document.getElementById("lockMsg"); if(m) m.textContent=isClosed(fDate.value)?"⛔ Mois clôturé — saisie verrouillée":""; };
-    fDate.addEventListener("input",chk); chk(); }
+  if(fDate) fDate.oninput=()=>{ const m=document.getElementById("lockMsg"); if(m) m.textContent=isClosed(fDate.value)?"⛔ Mois clôturé — verrouillé":""; };
 
   const btnAddLeave=document.getElementById("btnAddLeave");
   if(btnAddLeave){
     const upd=()=>{ const s=document.getElementById("lStart").value,e2=document.getElementById("lEnd").value;
-      document.getElementById("leaveDays").textContent=s&&e2?workingDays(s,e2)+" jour(s) ouvré(s) (hors dimanches et fériés)":""; };
-    document.getElementById("lStart").addEventListener("input",upd);
-    document.getElementById("lEnd").addEventListener("input",upd);
-    upd();
-    btnAddLeave.addEventListener("click",()=>{
+      document.getElementById("leaveDays").textContent=s&&e2?workingDays(s,e2)+" j ouvré(s) (hors dimanches et fériés)":""; };
+    document.getElementById("lStart").oninput=upd; document.getElementById("lEnd").oninput=upd; upd();
+    btnAddLeave.onclick=async()=>{
       const s=document.getElementById("lStart").value,e2=document.getElementById("lEnd").value;
       const days=workingDays(s,e2);
-      if(editingLeave){
-        const l=db.leaves.find(x=>x.id===editingLeave);
-        Object.assign(l,{type:document.getElementById("lType").value,start:s,end:e2,days});
-        editingLeave=null; log(`Modification d'une demande d'absence (${empName(l.emp)})`); toast("✅ Demande mise à jour.");
-      } else {
-        const l={id:"l"+Date.now(),emp:me.id,type:document.getElementById("lType").value,start:s,end:e2,days,status:"en attente"};
-        db.leaves.push(l);
-        // Notification e-mail à l'administrateur
-        sendMail("e1","📅 Nouvelle demande d'absence — "+me.name,
-          me.name+" a demandé : "+l.type+", du "+s+" au "+e2+" ("+days+" jour(s) ouvré(s)).\nConnectez-vous à Tempos pour accepter ou refuser.");
-        log(`Demande d'absence ${l.type} du ${s} au ${e2} (${days} j ouvrés)`); toast("📅 Demande envoyée — l'administrateur a été notifié.");
-      }
-      save(); render();
-    });
+      const {error}=await sb.from("leaves").insert({id:"l"+Date.now(),employee_id:me.id,
+        type:document.getElementById("lType").value,start_date:s,end_date:e2,days,status:"en attente"});
+      if(error) return toast("⛔ "+error.message);
+      await audit(`Demande d'absence ${document.getElementById("lType").value} du ${s} au ${e2} (${days} j ouvrés)`);
+      toast("📅 Demande envoyée — en attente de validation."); await loadAll(); render();
+    };
   }
-  const btnCancelLeave=document.getElementById("btnCancelLeave");
-  if(btnCancelLeave) btnCancelLeave.addEventListener("click",()=>{ editingLeave=null; render(); });
-  app.querySelectorAll("[data-leave-edit]").forEach(b=>b.addEventListener("click",()=>{ editingLeave=b.dataset.leaveEdit; tab="conges"; render(); }));
-  app.querySelectorAll("[data-ok]").forEach(b=>b.addEventListener("click",()=>{
-    const l=db.leaves.find(x=>x.id===b.dataset.ok); l.status="approuvé";
-    sendMail(l.emp,"✅ Demande d'absence approuvée","Bonjour,\n\nVotre demande ("+l.type+", du "+l.start+" au "+l.end+") a été approuvée par l'administrateur.\n\nTempos");
-    log("Demande d'absence approuvée ("+empName(l.emp)+")"); toast("✅ Absence approuvée — le salarié est notifié."); render(); }));
-  app.querySelectorAll("[data-no]").forEach(b=>b.addEventListener("click",()=>{
-    const l=db.leaves.find(x=>x.id===b.dataset.no); l.status="refusé";
-    sendMail(l.emp,"❌ Demande d'absence refusée","Bonjour,\n\nVotre demande ("+l.type+", du "+l.start+" au "+l.end+") a été refusée par l'administrateur.\n\nTempos");
-    log("Demande d'absence refusée ("+empName(l.emp)+")"); toast("❌ Absence refusée — le salarié est notifié."); render(); }));
+  app.querySelectorAll("[data-ok]").forEach(b=>b.onclick=async()=>{
+    const l=db.leaves.find(x=>x.id===b.dataset.ok);
+    const {error}=await sb.from("leaves").update({status:"approuvé"}).eq("id",l.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Absence approuvée ("+empName(l.employee_id)+")"); toast("✅ Absence approuvée."); await loadAll(); render();
+  });
+  app.querySelectorAll("[data-no]").forEach(b=>b.onclick=async()=>{
+    const l=db.leaves.find(x=>x.id===b.dataset.no);
+    const {error}=await sb.from("leaves").update({status:"refusé"}).eq("id",l.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Absence refusée ("+empName(l.employee_id)+")"); toast("❌ Absence refusée."); await loadAll(); render();
+  });
 
-  // Échanges
   const chatEmp=document.getElementById("chatEmp");
-  if(chatEmp) chatEmp.addEventListener("change",()=>{ chatWith=chatEmp.value; render(); });
+  if(chatEmp) chatEmp.onchange=()=>{ chatWith=chatEmp.value; render(); };
   const btnSend=document.getElementById("btnSend");
-  if(btnSend) btnSend.addEventListener("click",()=>{
+  if(btnSend) btnSend.onclick=async()=>{
     const txt=document.getElementById("msgText").value.trim();
     if(!txt) return toast("⚠️ Message vide.");
     const empId=isAdmin()?chatWith:me.id;
-    db.msgs.push({empId,from:isAdmin()?"admin":"salarie",text:txt,ts:TODAY+" "+new Date().toTimeString().slice(0,5),
-      readByAdmin:isAdmin(),readByEmp:!isAdmin()});
-    if(isAdmin()) sendMail(empId,"✉️ Nouveau message de l'administrateur","Vous avez reçu un message dans l'espace Échanges de Tempos :\n\n« "+txt+" »");
-    else sendMail("e1","✉️ Nouveau message — "+me.name,me.name+" vous a écrit dans l'espace Échanges :\n\n« "+txt+" »");
-    save(); toast("✉️ Message envoyé."); render();
-  });
+    const {error}=await sb.from("messages").insert({employee_id:empId,sender:isAdmin()?"admin":"salarie",body:txt});
+    if(error) return toast("⛔ "+error.message);
+    await loadAll(); render();
+  };
 
-  // Bilans
-  const btnPrint=document.getElementById("btnPrint");
-  if(btnPrint) btnPrint.addEventListener("click",()=>{
-    const emp=document.getElementById("rEmp").value, mk=document.getElementById("rMonth").value;
-    if(!mk) return toast("⚠️ Choisissez un mois.");
-    if(emp==="all") printAll(mk); else printReport(emp,mk);
-  });
-  const btnDownload=document.getElementById("btnDownload");
-  if(btnDownload) btnDownload.addEventListener("click",()=>{
-    const emp=document.getElementById("rEmp").value, mk=document.getElementById("rMonth").value;
-    if(!mk) return toast("⚠️ Choisissez un mois.");
-    if(emp==="all") downloadAll(mk); else downloadReport(emp,mk);
-  });
-  app.querySelectorAll("[data-rprint]").forEach(b=>b.addEventListener("click",()=>{
-    const [emp,mk]=b.dataset.rprint.split("|");
-    if(emp==="all") printAll(mk); else printReport(emp,mk);
-  }));
+  const btnAllPrint=document.getElementById("btnAllPrint");
+  if(btnAllPrint) btnAllPrint.onclick=()=>printAll(document.getElementById("rMonth").value);
+  const btnMePrint=document.getElementById("btnMePrint");
+  if(btnMePrint) btnMePrint.onclick=()=>printReport(me.id,document.getElementById("rMonth").value);
+  app.querySelectorAll("[data-rprint]").forEach(b=>b.onclick=()=>printReport(b.dataset.rprint,document.getElementById("rMonth").value));
 
   const btnClose=document.getElementById("btnClose");
-  if(btnClose) btnClose.addEventListener("click",()=>{ const m=MK(TODAY);
-    db.closed.push(m); db.entries.forEach(e=>{ if(MK(e.date)===m) e.status="validé"; }); save();
-    log("Clôture du mois "+m+" (validation des heures)");
-    toast("🔒 Mois "+m+" clôturé. Bilans disponibles dans l'onglet « Bilan mensuel »."); tab="bilan"; render(); });
-  app.querySelectorAll("[data-reopen]").forEach(a=>a.addEventListener("click",ev=>{ ev.preventDefault(); const m=a.dataset.reopen;
-    db.closed=db.closed.filter(x=>x!==m);
-    db.entries.forEach(e=>{ if(MK(e.date)===m) e.status="brouillon"; }); save();
-    toast("🔓 Mois "+m+" rouvert."); log("Réouverture du mois "+m); render(); }));
-  app.querySelectorAll("[data-target]").forEach(inp=>inp.addEventListener("change",()=>{
-    db.targets[inp.dataset.target]=+inp.value||0; save();
-    log("Volume annuel de "+empName(inp.dataset.target)+" fixé à "+inp.value+" h"); toast("🎯 Objectif mis à jour."); }));
-  app.querySelectorAll("[data-pin]").forEach(inp=>inp.addEventListener("change",()=>{
-    db.pins[inp.dataset.pin]=inp.value||"1234"; save(); toast("🔑 Code d'accès mis à jour."); }));
-  app.querySelectorAll("[data-email]").forEach(inp=>inp.addEventListener("change",()=>{
-    const e=EMPLOYEES.find(x=>x.id===inp.dataset.email); e.email=inp.value; save(); toast("📧 E-mail mis à jour."); }));
-  app.querySelectorAll("[data-cfg]").forEach(inp=>inp.addEventListener("change",()=>{
-    db.emailCfg[inp.dataset.cfg]=inp.value; save(); toast("📧 Paramètre enregistré."); }));
-
-  // États mensuels PDF depuis les notifications
-  app.querySelectorAll("[data-pdf]").forEach(b=>b.addEventListener("click",()=>{
-    const [emp,mk]=b.dataset.pdf.split("|"); printReport(emp,mk); }));
-  app.querySelectorAll("[data-pdfall]").forEach(b=>b.addEventListener("click",()=>{ printAll(b.dataset.pdfall); }));
-
-  // Invitations
-  app.querySelectorAll("[data-invite]").forEach(b=>b.addEventListener("click",()=>{
-    const e=EMPLOYEES.find(x=>x.id===b.dataset.invite);
-    sendMail(e.id,"📨 Votre accès à Tempos — Gestion du temps de travail",
-      "Bonjour "+e.name.split(" ")[0]+",\n\nVotre compte Tempos est prêt :\n"+
-      "• Identifiant : "+e.email+"\n• Code d'accès : "+(db.pins[e.id]||"1234")+"\n\n"+
-      "Connectez-vous pour saisir vos heures chaque jour et demander vos congés. Vos données sont strictement personnelles et confidentielles.\n\nL'administrateur");
-    log("Invitation envoyée à "+e.name+" ("+e.email+")");
-    toast("📨 Invitation envoyée à "+e.email); render();
-  }));
-  app.querySelectorAll("[data-emp-del]").forEach(b=>b.addEventListener("click",()=>{
-    const e=EMPLOYEES.find(x=>x.id===b.dataset.empDel);
-    if(!confirm("Supprimer "+e.name+" et TOUTES ses données (saisies, congés, messages) ?")) return;
-    db.entries=db.entries.filter(x=>x.emp!==e.id);
-    db.leaves=db.leaves.filter(x=>x.emp!==e.id);
-    db.msgs=(db.msgs||[]).filter(x=>x.empId!==e.id);
-    (db.roster||[]).forEach((r,i)=>{ if(r.id===e.id) db.roster.splice(i,1); });
-    const i=EMPLOYEES.findIndex(x=>x.id===e.id); if(i>-1) EMPLOYEES.splice(i,1);
-    save(); log("Compte supprimé : "+e.name); toast("🗑️ Compte supprimé avec ses données."); render();
-  }));
-  const btnAddEmp=document.getElementById("btnAddEmp");
-  if(btnAddEmp) btnAddEmp.addEventListener("click",()=>{
-    const name=document.getElementById("newName").value.trim();
-    const email=document.getElementById("newEmail").value.trim();
-    const pin=document.getElementById("newPin").value.trim()||String(1000+Math.floor(Math.random()*9000));
-    if(!name||!email) return toast("⚠️ Nom et e-mail obligatoires.");
-    const id="e"+Date.now();
-    const emp={id,name,role:"salarie",email,weekly:+document.getElementById("newWeekly").value||35};
-    EMPLOYEES.push(emp);
-    db.roster=db.roster||[]; db.roster.push(emp);
-    db.pins[id]=pin; db.targets[id]=+document.getElementById("newTarget").value||1607;
-    sendMail(id,"📨 Votre accès à Tempos — Gestion du temps de travail",
-      "Bonjour "+name.split(" ")[0]+",\n\nVotre compte Tempos a été créé :\n"+
-      "• Identifiant : "+email+"\n• Code d'accès : "+pin+"\n\n"+
-      "Connectez-vous pour saisir vos heures chaque jour et demander vos congés. Vos données sont strictement personnelles et confidentielles.\n\nL'administrateur");
-    log("Nouveau salarié invité : "+name+" ("+email+")");
-    save(); toast("✅ Compte créé — invitation envoyée à "+email); render();
+  if(btnClose) btnClose.onclick=async()=>{
+    const m=MK(TODAY);
+    const {error}=await sb.from("closed_months").insert({month:m});
+    if(error) return toast("⛔ "+error.message);
+    await sb.from("entries").update({status:"validé"}).eq("date","gte."+m+"-01"); // statuts mis à jour
+    await sb.from("entries").update({status:"validé"}).gte("date",m+"-01").lte("date",m+"-31");
+    await audit("Clôture du mois "+m+" (validation des heures)");
+    toast("🔒 Mois "+m+" clôturé : saisies verrouillées pour tous."); await loadAll(); tab="bilan"; render();
+  };
+  app.querySelectorAll("[data-save-emp]").forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.saveEmp;
+    const pin=app.querySelector(`[data-pin="${id}"]`).value;
+    const target=+app.querySelector(`[data-target="${id}"]`).value||1607;
+    const {error}=await sb.from("employees").update({pin,annual_target:target}).eq("id",id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Mise à jour du compte de "+empName(id)); toast("💾 Compte mis à jour."); await loadAll(); render();
   });
+  app.querySelectorAll("[data-rm-emp]").forEach(b=>b.onclick=async()=>{
+    const e=db.employees.find(x=>x.id===b.dataset.rmEmp);
+    if(!confirm("Supprimer "+e.name+" et toutes ses données ?")) return;
+    await sb.from("entries").delete().eq("employee_id",e.id);
+    await sb.from("leaves").delete().eq("employee_id",e.id);
+    await sb.from("messages").delete().eq("employee_id",e.id);
+    const {error}=await sb.from("employees").delete().eq("id",e.id);
+    if(error) return toast("⛔ Impossible : "+error.message);
+    await audit("Suppression du compte de "+e.name); toast("🗑️ Compte supprimé."); await loadAll(); render();
+  });
+  const btnAddEmp=document.getElementById("btnAddEmp");
+  if(btnAddEmp) btnAddEmp.onclick=async()=>{
+    const name=document.getElementById("newName").value.trim(),
+          email=document.getElementById("newEmail").value.trim(),
+          pin=document.getElementById("newPin").value.trim();
+    if(!name||!email||!pin) return toast("⚠️ Nom, e-mail et code obligatoires.");
+    const {error}=await sb.from("employees").insert({id:"e"+Date.now(),name,role:"salarie",email,pin,weekly_hours:35,annual_target:1607});
+    if(error) return toast("⛔ "+error.message);
+    await audit("Nouveau salarié invité : "+name+" ("+email+")"); toast("✅ Compte créé."); await loadAll(); render();
+  };
 }
-render();
 </script>
 </body>
 </html>
