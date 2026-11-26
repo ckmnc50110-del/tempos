@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tempos — Gestion du temps de travail</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { font-family: Inter, system-ui, sans-serif; color:#1e293b; background:#f1f5f9; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; }
+  h1 { font-size:1.3rem; margin:0; }
+  .muted { color:#64748b; font-size:.85rem; }
+  header { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .badge { border:1px solid #6ee7b7; background:#ecfdf5; color:#047857; padding:4px 10px; border-radius:999px; font-size:.75rem; }
+  nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  nav button { padding:8px 14px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; font-size:.85rem; }
+  nav button.active { background:#0f172a; color:#fff; border-color:#0f172a; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px; overflow-x:auto; }
+  .card h3 { margin:0 0 10px; font-size:.95rem; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #e2e8f0; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+  label { display:block; font-size:.75rem; color:#475569; margin-bottom:3px; }
+  input, select, textarea { padding:7px 9px; border:1px solid #cbd5e1; border-radius:8px; font-size:.85rem; width:100%; font-family:inherit; }
+  .btn { padding:8px 14px; border-radius:8px; border:none; background:#2563eb; color:#fff; cursor:pointer; font-size:.85rem; }
+  .btn.danger { background:#dc2626; } .btn.ghost { background:#e2e8f0; color:#0f172a; }
+  .tag { padding:2px 8px; border-radius:999px; font-size:.72rem; background:#e2e8f0; }
+  .tag.ok { background:#dcfce7; color:#166534; } .tag.warn { background:#fef3c7; color:#92400e; } .tag.err { background:#fee2e2; color:#991b1b; }
+  .toast { position:fixed; bottom:16px; right:16px; background:#0f172a; color:#fff; padding:12px 16px; border-radius:10px; font-size:.85rem; max-width:340px; z-index:60; }
+  #loginWrap { max-width:380px; margin:8vh auto; }
+  @media print { body > *:not(#printArea) { display:none !important; } #printArea { display:block !important; } .ph { page-break-after:always; } }
+  #printArea { display:none; }
+  #thread { max-height:300px; overflow:auto; padding:8px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0; display:flex; flex-direction:column; }
+  .msg { max-width:70%; padding:9px 12px; border-radius:12px; font-size:.85rem; margin-bottom:6px; }
+  .msg.me { background:#2563eb; color:#fff; align-self:flex-end; } .msg.other { background:#e2e8f0; align-self:flex-start; }
+</style>
+</head>
+<body>
+
+<!-- ⚙️ CONFIGURATION : collez ici vos valeurs Supabase (Settings → API) -->
+<script>
+const SUPABASE_URL = "https://VOTRE-PROJET.supabase.co";   // ← à remplacer
+const SUPABASE_ANON_KEY = "VOTRE_CLE_ANON";                // ← à remplacer (commence par eyJ...)
+</script>
+
+<div id="loginWrap">
+  <div class="card">
+    <h3>🔐 Connexion — Tempos</h3>
+    <p class="muted">Chaque salarié accède uniquement à ses propres informations.</p>
+    <div style="margin-bottom:10px"><label>E-mail</label><input type="email" id="loginEmail" placeholder="prenom.nom@entreprise.fr"></div>
+    <div style="margin-bottom:12px"><label>Code d'accès</label><input type="password" id="loginPin"></div>
+    <button class="btn" id="btnLogin" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="shell" style="display:none">
+  <header>
+    <div><h1>⏱️ Tempos — Gestion du temps de travail</h1><div class="muted">Application en ligne · données centralisées</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge">🔐 RGPD</span><span class="badge" id="whoami"></span>
+      <button class="btn ghost" id="btnLogout">Déconnexion</button>
+    </div>
+  </header>
+  <nav id="nav"></nav>
+  <div id="app"></div>
+</div>
+<div id="toastHost"></div>
+<div id="printArea"></div>
+
+<script>
+// ================== INITIALISATION ==================
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const TODAY = new Date().toISOString().slice(0,10);
+const MK = d => d.slice(0,7);
+
+let db = { employees:[], entries:[], leaves:[], closed:[], audit:[], messages:[] };
+let me = null, tab = "dashboard", editingEntry=null, editingLeave=null, chatWith=null;
+
+const isAdmin = () => me && me.role==="admin";
+const isClosed = d => db.closed.some(c=>c.month===MK(d));
+const hrs = e => { if(!e.start_time||!e.end_time) return 0;
+  const [sh,sm]=e.start_time.split(":"),[eh,em]=e.end_time.split(":");
+  return Math.max(0,((eh*60+em)-(sh*60+sm)-(e.pause_min||0))/60); };
+const f = h => (+h).toFixed(2).replace(".",",")+" h";
+const empName = id => (db.employees.find(e=>e.id===id)||{}).name || "?";
+const wk = d => { const dt=new Date(d), s=new Date(dt.getFullYear(),0,1);
+  return dt.getFullYear()+"-S"+String(Math.ceil(((dt-s)/864e5+s.getDay()+1)/7)).padStart(2,"0"); };
+function easter(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+  g=Math.floor((b+8)/25),h=(19*a+b-g-Math.floor((b-g+1)/3)+15)%30,i=Math.floor(c/4),k=c%4,
+  l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+  mo=Math.floor((h+l-7*m+114)/31),dy=((h+l-7*m+114)%31)+1; return new Date(y,mo-1,dy); }
+const holidaySet=(()=>{ const s=new Set();
+  for(let y=2024;y<=2032;y++){ const e=easter(y),add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n),iso=d=>d.toISOString().slice(0,10);
+    [y+"-01-01",iso(add(e,1)),y+"-05-01",y+"-05-08",iso(add(e,39)),iso(add(e,50)),y+"-07-14",y+"-08-15",y+"-11-01",y+"-11-11",y+"-12-25"].forEach(d=>s.add(d)); }
+  return s; })();
+function workingDays(start,end){ let n=0; const d=new Date(start+"T00:00:00"),stop=new Date(end+"T00:00:00");
+  while(d<=stop){ const iso=d.toISOString().slice(0,10);
+    if(new Date(d).getDay()!==0 && !holidaySet.has(iso)) n++; d.setDate(d.getDate()+1); } return n; }
+
+function toast(m){ const t=document.createElement("div"); t.className="toast"; t.textContent=m;
+  document.getElementById("toastHost").appendChild(t); setTimeout(()=>t.remove(),3500); }
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function audit(action){ await sb.from("audit_log").insert({actor:me?me.name:"système",action}); }
+
+async function loadAll(){
+  const [emp,en,lv,cl,au,ms]=await Promise.all([
+    sb.from("employees").select("*").order("name"),
+    sb.from("entries").select("*").order("date",{ascending:false}).limit(200),
+    sb.from("leaves").select("*").order("start_date",{ascending:false}),
+    sb.from("closed_months").select("*"),
+    sb.from("audit_log").select("*").order("ts",{ascending:false}).limit(80),
+    sb.from("messages").select("*").order("created_at"),
+  ]);
+  if(emp.error||en.error||lv.error||cl.error) { toast("⛔ Erreur de connexion à la base : "+((emp.error||en.error||lv.error||cl.error).message)); return false; }
+  db={ employees:emp.data, entries:en.data, leaves:lv.data, closed:cl.data, audit:au.data||[], messages:ms.data||[] };
+  return true;
+}
+
+// ================== CONNEXION ==================
+document.getElementById("btnLogin").addEventListener("click",async()=>{
+  const email=document.getElementById("loginEmail").value.trim().toLowerCase();
+  const pin=document.getElementById("loginPin").value;
+  if(!await loadAll()) return;
+  const u=db.employees.find(e=>e.email.toLowerCase()===email && e.pin===pin);
+  if(!u) return toast("⛔ E-mail ou code d'accès incorrect.");
+  me=u; document.getElementById("loginPin").value="";
+  tab="dashboard"; render(); toast("👋 Bienvenue, "+u.name.split(" ")[0]+".");
+});
+document.getElementById("btnLogout").addEventListener("click",()=>{ me=null;
+  document.getElementById("shell").style.display="none";
+  document.getElementById("loginWrap").style.display="block"; });
+
+// ================== BILAN MENSUEL ==================
+function buildReport(empId,mk){
+  const emp=db.employees.find(e=>e.id===empId);
+  const list=db.entries.filter(e=>e.employee_id===empId&&MK(e.date)===mk).sort((a,b)=>a.date.localeCompare(b.date));
+  const weeks={}; list.forEach(e=>{ const w=wk(e.date); (weeks[w]=weeks[w]||[]).push(e); });
+  const tot=list.reduce((s,e)=>s+hrs(e),0);
+  const lv=db.leaves.filter(l=>l.employee_id===empId&&l.start_date<=mk+"-31"&&l.end_date>=mk+"-01");
+  const cumul=db.entries.filter(e=>e.employee_id===empId).reduce((s,e)=>s+hrs(e),0);
+  let h=`<div class="ph"><h2>Bilan mensuel — ${emp.name} — ${mk}</h2>
+  <p style="font-size:9pt;color:#475569">Généré par Tempos · ${TODAY} · Confidentiel</p>`;
+  Object.keys(weeks).sort().forEach(w=>{
+    const wt=weeks[w].reduce((s,e)=>s+hrs(e),0);
+    h+=`<h3 style="font-size:10pt">Semaine ${w} — total ${f(wt)}</h3>
+    <table border="0" cellpadding="3" style="width:100%"><tr style="background:#eef2f7"><th>Date</th><th>Arrivée</th><th>Départ</th><th>Pause</th><th>Total</th></tr>`+
+    weeks[w].map(e=>`<tr><td>${e.date}</td><td>${e.start_time}</td><td>${e.end_time}</td><td>${e.pause_min} min</td><td><b>${f(hrs(e))}</b></td></tr>`).join("")+"</table>";
+  });
+  h+=`<h3 style="font-size:10pt">Absences du mois</h3>`+(lv.length?`<table border="0" cellpadding="3"><tr style="background:#eef2f7"><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>`+
+    lv.map(l=>`<tr><td>${l.type}</td><td>${l.start_date}</td><td>${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td><td>${l.status}</td></tr>`).join("")+"</table>":"<p style='font-size:9pt'>Aucune.</p>")+
+  `<h3 style="font-size:10pt">Récapitulatif</h3><table border="0" cellpadding="3">
+   <tr><td>Total heures du mois</td><td><b>${f(tot)}</b></td></tr>
+   <tr><td>Cumul annuel / objectif</td><td>${f(cumul)} / ${emp.annual_target} h</td></tr></table></div>`;
+  return h;
+}
+function printReport(empId,mk){ document.getElementById("printArea").innerHTML=buildReport(empId,mk); setTimeout(()=>window.print(),80); }
+function printAll(mk){ document.getElementById("printArea").innerHTML=db.employees.map(e=>buildReport(e.id,mk)).join(""); setTimeout(()=>window.print(),80); }
+
+// ================== RENDU ==================
+function render(){
+  if(!me) return;
+  document.getElementById("loginWrap").style.display="none";
+  document.getElementById("shell").style.display="block";
+  document.getElementById("whoami").textContent=me.name+(isAdmin()?" · Administrateur":" · Salarié");
+
+  const NAV=[["dashboard","Tableau de bord"],["saisie","Saisie horaire"],["planning","Planning / Horaires"],["conges","Congés & Absences"],["echanges","Échanges ✉️"],["syntheses","Synthèses"],["bilan","Bilan mensuel 🖨️"],["admin","Administration 🔒"]];
+  document.getElementById("nav").innerHTML=NAV.map(([k,l])=>(k==="admin"&&!isAdmin())?"":`<button data-t="${k}" class="${tab===k?"active":""}">${l}</button>`).join("");
+  document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ tab=b.dataset.t; render(); });
+
+  const app=document.getElementById("app");
+  const scopeE=()=>db.entries.filter(e=>isAdmin()||e.employee_id===me.id);
+  const scopeL=()=>db.leaves.filter(l=>isAdmin()||l.employee_id===me.id);
+  const empSel=(selId)=>db.employees.map(e=>`<option value="${e.id}" ${e.id===selId?"selected":""}>${esc(e.name)}</option>`).join("");
+
+  function entryTable(list){
+    return `<table><tr><th>Date</th><th>Salarié</th><th>Horaires</th><th>Total</th><th>Statut</th>${isAdmin()?"<th></th>":""}</tr>`+
+      list.slice(0,20).map(e=>`<tr><td>${e.date}</td><td>${esc(empName(e.employee_id))}</td><td>${e.start_time} – ${e.end_time} (pause ${e.pause_min} min)</td><td><b>${f(hrs(e))}</b></td>
+      <td><span class="tag ${e.status==="validé"?"ok":"warn"}">${e.status}</span></td>
+      ${isAdmin()?`<td>${!isClosed(e.date)?`<button class="btn ghost" data-del="${e.id}">🗑️</button>`:""}</td>`:""}</tr>`).join("")+"</table>";
+  }
+  let html="";
+
+  if(tab==="dashboard"){
+    const mine=db.entries.filter(e=>e.employee_id===me.id);
+    const draft=db.entries.filter(e=>MK(e.date)===MK(TODAY)&&e.status==="brouillon").length;
+    const pend=db.leaves.filter(l=>l.status==="en attente").length;
+    html=`<div class="grid">
+      ${isAdmin()?`<div class="card"><h3>📩 À traiter</h3>
+        ${draft>0?`⚠️ <b>${draft}</b> saisie(s) du mois en cours attendent validation.<br>`:""}
+        ${pend>0?`📅 <b>${pend}</b> demande(s) de congé(s) en attente.`:""}
+        ${draft===0&&pend===0?'<span style="color:#047857">✅ Rien à traiter.</span>':""}</div>`:
+      `<div class="card"><h3>🔔 Ma saisie du jour</h3>${
+        mine.some(e=>e.date===TODAY)?'<span style="color:#047857">✅ Heures du jour saisies.</span>':'<span style="color:#b45309">⏰ Pensez à saisir vos heures du jour.</span>'}</div>`}
+      <div class="card"><h3>🗓️ Mois clôturés</h3>${db.closed.map(c=>`<span class="tag" style="margin-right:6px">🔒 ${c.month}</span>`).join("")||'<span class="muted">Aucun.</span>'}</div>
+      <div class="card"><h3>👤 Mon récapitulatif</h3><p style="margin:0;font-size:.85rem">Mois : <b>${f(mine.filter(e=>MK(e.date)===MK(TODAY)).reduce((s,e)=>s+hrs(e),0))}</b> · Année : <b>${f(mine.reduce((s,e)=>s+hrs(e),0))}</b> / ${me.annual_target} h</p></div>
+    </div><div class="card"><h3>${isAdmin()?"Dernières saisies (tous)":"Mes dernières saisies"}</h3>${entryTable(scopeE())}</div>`;
+  }
+
+  if(tab==="saisie"){
+    html=`<div class="alert" style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;font-size:.85rem;margin-bottom:12px"><b>✍️ Saisie quotidienne</b>${isAdmin()?" En tant qu'administrateur, vous saisissez pour n'importe quel salarié.":" Modifiable jusqu'à la clôture mensuelle."}</div>
+    <div class="card"><h3>Nouvelle saisie</h3><div class="grid">
+      ${isAdmin()?`<div><label>Salarié</label><select id="fEmp">${empSel(me.id)}</select></div>`:""}
+      <div><label>Date</label><input type="date" id="fDate" value="${TODAY}"></div>
+      <div><label>Arrivée</label><input type="time" id="fStart" value="09:00"></div>
+      <div><label>Départ</label><input type="time" id="fEnd" value="17:00"></div>
+      <div><label>Pause (min)</label><input type="number" id="fPause" value="45"></div>
+    </div><p><button class="btn" id="btnAddEntry">Enregistrer</button> <span id="lockMsg" class="muted"></span></p></div>
+    <div class="card"><h3>${isAdmin()?"Toutes les saisies":"Mes saisies"}</h3>${entryTable(scopeE())}</div>`;
+  }
+
+  if(tab==="planning"){
+    html=`<div class="card"><h3>Horaires contractuels</h3><table><tr><th>Salarié</th><th>Rôle</th><th>H/semaine</th><th>Objectif annuel</th></tr>
+      ${db.employees.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td><span class="tag ${e.role==="admin"?"ok":""}">${e.role==="admin"?"Administrateur":"Salarié"}</span></td><td>${e.weekly_hours} h</td><td>${e.annual_target} h</td></tr>`).join("")}</table></div>
+    <div class="card"><h3>Absences à venir</h3><table><tr><th>Salarié</th><th>Type</th><th>Du</th><th>Au</th><th>Jours ouvrés</th><th>Statut</th></tr>
+      ${db.leaves.filter(l=>l.end_date>=TODAY).map(l=>`<tr><td>${esc(empName(l.employee_id))}</td><td>${l.type}</td><td>${l.start_date}</td><td>${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td><td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td></tr>`).join("")}</table></div>`;
+  }
+
+  if(tab==="conges"){
+    html=`<div class="card"><h3>Nouvelle demande d'absence</h3><div class="grid">
+      <div><label>Type</label><select id="lType"><option>Congé payé</option><option>RTT</option><option>Maladie</option><option>Sans solde</option><option>Formation</option></select></div>
+      <div><label>Du</label><input type="date" id="lStart" value="${TODAY}"></div>
+      <div><label>Au</label><input type="date" id="lEnd" value="${TODAY}"></div>
+    </div><p><button class="btn" id="btnAddLeave">Envoyer la demande</button> <span id="leaveDays" class="muted"></span></p></div>
+    <div class="card"><h3>${isAdmin()?"Toutes les demandes":"Mes demandes"}</h3><table>
+      <tr><th>Salarié</th><th>Type</th><th>Période</th><th>Jours ouvrés</th><th>Statut</th>${isAdmin()?"<th>Décision</th>":""}</tr>
+      ${scopeL().map(l=>`<tr><td>${esc(empName(l.employee_id))}</td><td>${l.type}</td><td>${l.start_date} → ${l.end_date}</td><td>${workingDays(l.start_date,l.end_date)} j</td>
+      <td><span class="tag ${l.status==="approuvé"?"ok":l.status==="refusé"?"err":"warn"}">${l.status}</span></td>
+      ${isAdmin()&&l.status==="en attente"?`<td><button class="btn" data-ok="${l.id}">✅</button> <button class="btn danger" data-no="${l.id}">❌</button></td>`:isAdmin()?"<td></td>":""}</tr>`).join("")}</table></div>`;
+  }
+
+  if(tab==="echanges"){
+    const active=isAdmin()?(chatWith||(db.employees.find(e=>e.role!=="admin")||{}).id):me.id;
+    const thread=db.messages.filter(m=>m.employee_id===active);
+    html=`<div class="card"><h3>✉️ Échanges ${isAdmin()?"— sélectionnez un salarié":"avec l'administrateur"}</h3>
+      ${isAdmin()?`<div style="margin-bottom:10px"><label>Salarié</label><select id="chatEmp">${db.employees.filter(e=>e.role!=="admin").map(e=>`<option value="${e.id}" ${e.id===active?"selected":""}>${esc(e.name)}</option>`).join("")}</select></div>`:""}
+      <div id="thread">${thread.map(m=>`<div class="msg ${m.sender==="salarie"?"other":"me"}">${esc(m.body)}<div style="font-size:.65rem;opacity:.7">${new Date(m.created_at).toLocaleString("fr-FR")}</div></div>`).join("")||'<span class="muted">Aucun message.</span>'}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><textarea id="msgText" rows="2" placeholder="Votre message…"></textarea>
+      <button class="btn" id="btnSend" style="align-self:flex-end">Envoyer</button></div></div>`;
+  }
+
+  if(tab==="syntheses"){
+    const scope=isAdmin()?db.employees:[me];
+    const weeks={};
+    scopeE().forEach(e=>{ const w=wk(e.date); (weeks[w]=weeks[w]||{})[e.employee_id]=(weeks[w][e.employee_id]||0)+hrs(e); });
+    const wks=Object.keys(weeks).sort(), maxW=Math.max(1,...wks.flatMap(w=>Object.values(weeks[w])));
+    const COLORS=["#2563eb","#16a34a","#d97706","#9333ea","#0891b2"];
+    html=(isAdmin()?`<div class="card"><h3>📊 Décompte hebdomadaire</h3>${wks.map(w=>`<div style="margin-bottom:8px"><b style="font-size:.8rem">${w}</b>
+      ${db.employees.map((e,i)=>weeks[w][e.id]?`<div style="display:flex;align-items:center;gap:8px;font-size:.8rem;margin:4px 0"><span style="width:110px">${esc(e.name.split(" ")[0])}</span>
+      <span style="flex:1;background:#f1f5f9;border-radius:4px"><span style="display:block;height:14px;width:${weeks[w][e.id]/maxW*100}%;background:${COLORS[i%5]};border-radius:4px"></span></span><b>${f(weeks[w][e.id])}</b></div>`:"").join("")}</div>`).join("")||"<span class='muted'>Aucune donnée.</span>"}</div>`:"")+
+    `<div class="card"><h3>${isAdmin()?"Synthèse annuelle — tous salariés":"Ma synthèse annuelle"}</h3><table>
+      <tr><th>Salarié</th><th>Mois en cours</th><th>Cumul annuel</th><th>Objectif</th><th>Avancement</th></tr>
+      ${scope.map(e=>{ const t=db.entries.filter(x=>x.employee_id===e.id);
+        const tot=t.reduce((s,x)=>s+hrs(x),0), mo=t.filter(x=>MK(x.date)===MK(TODAY)).reduce((s,x)=>s+hrs(x),0);
+        const pct=Math.min(100,tot/(e.annual_target||1)*100);
+        return `<tr><td><b>${esc(e.name)}</b></td><td>${f(mo)}</td><td>${f(tot)}</td><td>${e.annual_target} h</td>
+        <td><span style="background:#f1f5f9;border-radius:4px;width:100px;display:inline-block;vertical-align:middle"><span style="display:block;height:14px;width:${pct}%;background:#2563eb;border-radius:4px"></span></span> ${Math.round(pct)} %</td></tr>`;}).join("")}</table></div>`;
+  }
+
+  if(tab==="bilan"){
+    const scope=isAdmin()?db.employees:[me];
+    html=`<div class="card"><h3>🖨️ Bilan mensuel détaillé par semaine</h3>
+      ${isAdmin()?`<div class="grid">
+      <div><label>Mois</label><input type="month" id="rMonth" value="${MK(TODAY)}"></div></div>
+      <p style="margin:10px 0 0">${db.employees.map(e=>`<button class="btn ghost" style="margin:3px" data-rprint="${e.id}">${esc(e.name)} 🖨️</button>`).join("")}
+      <button class="btn" style="margin-left:8px" id="btnAllPrint">Tous les salariés 🖨️</button></p>`
+      :`<div><label>Mois</label><input type="month" id="rMonth" value="${MK(TODAY)}"></div>
+      <p><button class="btn" id="btnMePrint">🖨️ Imprimer mon bilan</button></p>`}
+      <p class="muted" style="margin-bottom:0">Dans la fenêtre d'impression, choisissez « Enregistrer au format PDF » pour obtenir le fichier PDF.</p></div>`;
+  }
+
+  if(tab==="admin"){
+    html=`<div class="card"><h3>🔒 Clôture mensuelle</h3>
+      <button class="btn" id="btnClose" ${db.closed.some(c=>c.month===MK(TODAY))?"disabled":""}>Clôturer le mois en cours (${MK(TODAY)})</button>
+      <div style="margin-top:10px">${db.closed.map(c=>`<span class="tag" style="margin-right:8px">🔒 ${c.month}</span>`).join("")}</div></div>
+    <div class="card"><h3>🎯 Volumes horaires annuels &amp; comptes</h3><table>
+      <tr><th>Salarié</th><th>E-mail</th><th>Code</th><th>Objectif (h/an)</th><th></th></tr>
+      ${db.employees.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td>${esc(e.email)}</td>
+        <td><input type="text" style="width:80px" data-pin="${e.id}" value="${esc(e.pin)}"></td>
+        <td><input type="number" style="width:90px" data-target="${e.id}" value="${e.annual_target}"></td>
+        <td><button class="btn ghost" data-save-emp="${e.id}">💾</button>${e.id!==me.id?` <button class="btn danger" data-rm-emp="${e.id}">🗑️</button>`:""}</td></tr>`).join("")}</table></div>
+    <div class="card"><h3>➕ Inviter un nouveau salarié</h3><div class="grid">
+      <div><label>Nom</label><input id="newName" placeholder="Prénom Nom"></div>
+      <div><label>E-mail</label><input id="newEmail" placeholder="prenom.nom@entreprise.fr"></div>
+      <div><label>Code d'accès initial</label><input id="newPin" placeholder="ex. 4821"></div>
+    </div><p><button class="btn" id="btnAddEmp">Créer le compte</button></p></div>
+    <div class="card"><h3>🛡️ Journal d'audit</h3><div style="max-height:200px;overflow:auto;font-size:.75rem;color:#475569">
+      ${db.audit.map(a=>`<div>[${new Date(a.ts).toLocaleString("fr-FR")}] <b>${esc(a.actor)}</b> — ${esc(a.action)}</div>`).join("")}</div></div>`;
+  }
+
+  app.innerHTML=html;
+
+  // ================== ÉVÉNEMENTS ==================
+  app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    const e=db.entries.find(x=>x.id===b.dataset.del);
+    if(isClosed(e.date)) return toast("⛔ Mois clôturé : suppression impossible.");
+    const {error}=await sb.from("entries").delete().eq("id",e.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Suppression d'une saisie du "+e.date); toast("🗑️ Saisie supprimée.");
+    await loadAll(); render();
+  });
+  const btnAddEntry=document.getElementById("btnAddEntry");
+  if(btnAddEntry) btnAddEntry.onclick=async()=>{
+    const date=document.getElementById("fDate").value;
+    if(isClosed(date)) return toast("⛔ Mois clôturé : saisie verrouillée pour cette date.");
+    const emp=isAdmin()?(document.getElementById("fEmp")?document.getElementById("fEmp").value:me.id):me.id;
+    const data={id:"x"+Date.now(),employee_id:emp,date,start_time:document.getElementById("fStart").value,
+      end_time:document.getElementById("fEnd").value,pause_min:+document.getElementById("fPause").value||0,status:"brouillon"};
+    if(hrs(data)<=0) return toast("⚠️ Horaires invalides.");
+    const {error}=await sb.from("entries").insert(data);
+    if(error) return toast("⛔ "+error.message);
+    await audit(`Saisie horaire du ${date} (${f(hrs(data))}) — ${empName(emp)}`);
+    toast("✅ Saisie enregistrée ("+f(hrs(data))+")."); await loadAll(); render();
+  };
+  const fDate=document.getElementById("fDate");
+  if(fDate) fDate.oninput=()=>{ const m=document.getElementById("lockMsg"); if(m) m.textContent=isClosed(fDate.value)?"⛔ Mois clôturé — verrouillé":""; };
+
+  const btnAddLeave=document.getElementById("btnAddLeave");
+  if(btnAddLeave){
+    const upd=()=>{ const s=document.getElementById("lStart").value,e2=document.getElementById("lEnd").value;
+      document.getElementById("leaveDays").textContent=s&&e2?workingDays(s,e2)+" j ouvré(s) (hors dimanches et fériés)":""; };
+    document.getElementById("lStart").oninput=upd; document.getElementById("lEnd").oninput=upd; upd();
+    btnAddLeave.onclick=async()=>{
+      const s=document.getElementById("lStart").value,e2=document.getElementById("lEnd").value;
+      const days=workingDays(s,e2);
+      const {error}=await sb.from("leaves").insert({id:"l"+Date.now(),employee_id:me.id,
+        type:document.getElementById("lType").value,start_date:s,end_date:e2,days,status:"en attente"});
+      if(error) return toast("⛔ "+error.message);
+      await audit(`Demande d'absence ${document.getElementById("lType").value} du ${s} au ${e2} (${days} j ouvrés)`);
+      toast("📅 Demande envoyée — en attente de validation."); await loadAll(); render();
+    };
+  }
+  app.querySelectorAll("[data-ok]").forEach(b=>b.onclick=async()=>{
+    const l=db.leaves.find(x=>x.id===b.dataset.ok);
+    const {error}=await sb.from("leaves").update({status:"approuvé"}).eq("id",l.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Absence approuvée ("+empName(l.employee_id)+")"); toast("✅ Absence approuvée."); await loadAll(); render();
+  });
+  app.querySelectorAll("[data-no]").forEach(b=>b.onclick=async()=>{
+    const l=db.leaves.find(x=>x.id===b.dataset.no);
+    const {error}=await sb.from("leaves").update({status:"refusé"}).eq("id",l.id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Absence refusée ("+empName(l.employee_id)+")"); toast("❌ Absence refusée."); await loadAll(); render();
+  });
+
+  const chatEmp=document.getElementById("chatEmp");
+  if(chatEmp) chatEmp.onchange=()=>{ chatWith=chatEmp.value; render(); };
+  const btnSend=document.getElementById("btnSend");
+  if(btnSend) btnSend.onclick=async()=>{
+    const txt=document.getElementById("msgText").value.trim();
+    if(!txt) return toast("⚠️ Message vide.");
+    const empId=isAdmin()?chatWith:me.id;
+    const {error}=await sb.from("messages").insert({employee_id:empId,sender:isAdmin()?"admin":"salarie",body:txt});
+    if(error) return toast("⛔ "+error.message);
+    await loadAll(); render();
+  };
+
+  const btnAllPrint=document.getElementById("btnAllPrint");
+  if(btnAllPrint) btnAllPrint.onclick=()=>printAll(document.getElementById("rMonth").value);
+  const btnMePrint=document.getElementById("btnMePrint");
+  if(btnMePrint) btnMePrint.onclick=()=>printReport(me.id,document.getElementById("rMonth").value);
+  app.querySelectorAll("[data-rprint]").forEach(b=>b.onclick=()=>printReport(b.dataset.rprint,document.getElementById("rMonth").value));
+
+  const btnClose=document.getElementById("btnClose");
+  if(btnClose) btnClose.onclick=async()=>{
+    const m=MK(TODAY);
+    const {error}=await sb.from("closed_months").insert({month:m});
+    if(error) return toast("⛔ "+error.message);
+    await sb.from("entries").update({status:"validé"}).eq("date","gte."+m+"-01"); // statuts mis à jour
+    await sb.from("entries").update({status:"validé"}).gte("date",m+"-01").lte("date",m+"-31");
+    await audit("Clôture du mois "+m+" (validation des heures)");
+    toast("🔒 Mois "+m+" clôturé : saisies verrouillées pour tous."); await loadAll(); tab="bilan"; render();
+  };
+  app.querySelectorAll("[data-save-emp]").forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.saveEmp;
+    const pin=app.querySelector(`[data-pin="${id}"]`).value;
+    const target=+app.querySelector(`[data-target="${id}"]`).value||1607;
+    const {error}=await sb.from("employees").update({pin,annual_target:target}).eq("id",id);
+    if(error) return toast("⛔ "+error.message);
+    await audit("Mise à jour du compte de "+empName(id)); toast("💾 Compte mis à jour."); await loadAll(); render();
+  });
+  app.querySelectorAll("[data-rm-emp]").forEach(b=>b.onclick=async()=>{
+    const e=db.employees.find(x=>x.id===b.dataset.rmEmp);
+    if(!confirm("Supprimer "+e.name+" et toutes ses données ?")) return;
+    await sb.from("entries").delete().eq("employee_id",e.id);
+    await sb.from("leaves").delete().eq("employee_id",e.id);
+    await sb.from("messages").delete().eq("employee_id",e.id);
+    const {error}=await sb.from("employees").delete().eq("id",e.id);
+    if(error) return toast("⛔ Impossible : "+error.message);
+    await audit("Suppression du compte de "+e.name); toast("🗑️ Compte supprimé."); await loadAll(); render();
+  });
+  const btnAddEmp=document.getElementById("btnAddEmp");
+  if(btnAddEmp) btnAddEmp.onclick=async()=>{
+    const name=document.getElementById("newName").value.trim(),
+          email=document.getElementById("newEmail").value.trim(),
+          pin=document.getElementById("newPin").value.trim();
+    if(!name||!email||!pin) return toast("⚠️ Nom, e-mail et code obligatoires.");
+    const {error}=await sb.from("employees").insert({id:"e"+Date.now(),name,role:"salarie",email,pin,weekly_hours:35,annual_target:1607});
+    if(error) return toast("⛔ "+error.message);
+    await audit("Nouveau salarié invité : "+name+" ("+email+")"); toast("✅ Compte créé."); await loadAll(); render();
+  };
+}
+</script>
+</body>
+</html>
